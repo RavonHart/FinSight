@@ -37,8 +37,34 @@ SyncSessionLocal = sessionmaker(
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """Standard database session with bypass_rls=true for unauthenticated/system endpoints."""
     async with AsyncSessionLocal() as session:
         try:
+            # Set system bypass for internal queries that don't belong to a specific user
+            await session.execute(text("SELECT set_config('app.bypass_rls', 'true', true)"))
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
+async def get_user_db(user_id: str, is_admin: bool = False) -> AsyncGenerator[AsyncSession, None]:
+    """User-scoped database session setting PostgreSQL RLS context variables (§11, §30)."""
+    async with AsyncSessionLocal() as session:
+        try:
+            # Set request-scoped RLS session variables using PostgreSQL set_config
+            await session.execute(
+                text("SELECT set_config('app.current_user_id', :user_id, true)"),
+                {"user_id": str(user_id)}
+            )
+            admin_val = "true" if is_admin else "false"
+            await session.execute(
+                text("SELECT set_config('app.is_admin', :is_admin, true)"),
+                {"is_admin": admin_val}
+            )
+            await session.execute(text("SELECT set_config('app.bypass_rls', 'false', true)"))
             yield session
         except Exception:
             await session.rollback()

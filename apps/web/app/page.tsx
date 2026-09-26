@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { 
   ShieldCheck, 
   Activity, 
@@ -13,8 +14,11 @@ import {
   Layers, 
   BookOpen, 
   TrendingUp, 
-  RefreshCw 
+  RefreshCw,
+  ArrowRight,
+  UserCheck
 } from "lucide-react";
+import { useAuth } from "@/components/auth-context";
 
 interface HealthData {
   status: string;
@@ -24,6 +28,7 @@ interface HealthData {
 }
 
 export default function HomePage() {
+  const { user } = useAuth();
   const [health, setHealth] = useState<HealthData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [lastChecked, setLastChecked] = useState<string>("");
@@ -65,7 +70,7 @@ export default function HomePage() {
             </div>
             <span className="text-xl font-bold tracking-tight text-white">FinSight</span>
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-              Phase 0 Foundation
+              Phase 1 Auth Ready
             </span>
           </div>
 
@@ -74,6 +79,32 @@ export default function HomePage() {
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span>System Online</span>
             </div>
+
+            {user ? (
+              <Link
+                href="/app/dashboard"
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition shadow-md shadow-blue-500/20"
+              >
+                <UserCheck className="h-3.5 w-3.5" />
+                <span>Dashboard</span>
+              </Link>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <Link
+                  href="/login"
+                  className="px-3 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-800/60 text-xs font-medium text-slate-300 hover:text-white transition"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/signup"
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition shadow-md shadow-blue-500/20"
+                >
+                  Get Started
+                </Link>
+              </div>
+            )}
+
             <button
               onClick={checkHealth}
               disabled={loading}
@@ -103,13 +134,31 @@ export default function HomePage() {
           <p className="mt-4 text-base sm:text-lg text-slate-400 leading-relaxed">
             LLMs reason and explain. Jev makes structured judgments. Deterministic code performs financial calculations. External data sources provide evidence. LangGraph orchestrates the workflow. Humans make the final decisions.
           </p>
+
+          <div className="mt-8 flex items-center space-x-4">
+            <Link
+              href={user ? "/app/dashboard" : "/signup"}
+              className="inline-flex items-center space-x-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition shadow-lg shadow-blue-500/25"
+            >
+              <span>{user ? "Open Research Workspace" : "Create Research Account"}</span>
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            {!user && (
+              <Link
+                href="/login"
+                className="px-5 py-3 rounded-xl border border-slate-800 bg-slate-900/60 hover:bg-slate-800/60 text-slate-300 text-sm font-medium transition"
+              >
+                Sign In
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Milestone Verification Card */}
-        <div className="mt-10 p-6 rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm">
+        <div className="mt-12 p-6 rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm">
           <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
             <div>
-              <h2 className="text-lg font-semibold text-white">Phase 0 Acceptance Criteria</h2>
+              <h2 className="text-lg font-semibold text-white">System Verification Status</h2>
               <p className="text-xs text-slate-400">Verifying core system services and communication contracts</p>
             </div>
             {lastChecked && (
@@ -122,8 +171,8 @@ export default function HomePage() {
             <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800/80 flex items-start space-x-3">
               <CheckCircle2 className="h-5 w-5 text-emerald-400 mt-0.5" />
               <div>
-                <div className="text-sm font-semibold text-white">Frontend Web</div>
-                <div className="text-xs text-slate-400 mt-1">Next.js 14 App Router, Tailwind CSS, TypeScript</div>
+                <div className="text-sm font-semibold text-white">Frontend Web &amp; Auth</div>
+                <div className="text-xs text-slate-400 mt-1">Next.js 14 App Router, Auth Context, Protected Routes</div>
                 <div className="mt-2 text-xs font-mono text-emerald-400">Status: Loaded (Port 3000)</div>
               </div>
             </div>
@@ -133,7 +182,7 @@ export default function HomePage() {
               <Activity className="h-5 w-5 text-blue-400 mt-0.5" />
               <div>
                 <div className="text-sm font-semibold text-white">FastAPI Backend</div>
-                <div className="text-xs text-slate-400 mt-1">REST API, Pydantic v2, SSE events, JWT auth</div>
+                <div className="text-xs text-slate-400 mt-1">REST API, Pydantic v2, JWT &amp; Local JWKS Auth</div>
                 <div className="mt-2 text-xs font-mono text-blue-400">
                   /health: {health?.status || "checking..."} (Port 8000)
                 </div>
@@ -145,7 +194,7 @@ export default function HomePage() {
               <Database className="h-5 w-5 text-purple-400 mt-0.5" />
               <div>
                 <div className="text-sm font-semibold text-white">PostgreSQL &amp; Redis</div>
-                <div className="text-xs text-slate-400 mt-1">pgvector enabled, Alembic migrations ready</div>
+                <div className="text-xs text-slate-400 mt-1">pgvector enabled, Row-Level Security active</div>
                 <div className="mt-2 text-xs font-mono text-purple-400">
                   DB: {health?.database || "ready"} | Redis: {health?.redis || "ready"}
                 </div>
