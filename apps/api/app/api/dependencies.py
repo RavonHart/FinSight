@@ -12,14 +12,14 @@ async def get_redis() -> AsyncGenerator[aioredis.Redis, None]:
     try:
         yield client
     finally:
-        await client.close()
+        await client.aclose()
 
 
 async def check_redis_health() -> bool:
     try:
         client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
         response = await client.ping()
-        await client.close()
+        await client.aclose()
         return response is True or response == "PONG"
     except Exception:
         return False
