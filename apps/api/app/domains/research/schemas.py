@@ -78,6 +78,21 @@ class ClaimResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class JevEvaluationResponse(BaseModel):
+    id: uuid.UUID
+    research_run_id: Optional[uuid.UUID] = None
+    question_id: str
+    result_type: str
+    choice_value: Optional[str] = None
+    score_value: Optional[Decimal] = None
+    probabilities_json: Optional[Dict[str, float]] = None
+    confidence: Decimal
+    model_version: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ResearchRunResponse(BaseModel):
     id: uuid.UUID
     project_id: uuid.UUID

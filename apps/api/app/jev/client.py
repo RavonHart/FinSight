@@ -188,6 +188,86 @@ class JevClient:
                 choice_value = "MODERATE"
                 confidence = 0.80
 
+        elif question.id == "evidence_sufficiency":
+            # Evaluates whether sources and evidence are sufficient (§13, §14)
+            ev_count = state.get("evidence_count", 0)
+            src_count = state.get("sources_count", 0)
+            is_insufficient_test = state.get("is_insufficient_test", False)
+
+            if is_insufficient_test or ev_count < 2 or src_count < 1:
+                probabilities = {"INSUFFICIENT": 0.82, "SUFFICIENT": 0.15, "STRONG": 0.03}
+                choice_value = "INSUFFICIENT"
+                confidence = 0.45  # Below medium threshold -> triggers gather more evidence / insufficient
+            elif ev_count >= 3 and src_count >= 2:
+                probabilities = {"INSUFFICIENT": 0.03, "SUFFICIENT": 0.17, "STRONG": 0.80}
+                choice_value = "STRONG"
+                confidence = 0.88
+            else:
+                probabilities = {"INSUFFICIENT": 0.12, "SUFFICIENT": 0.76, "STRONG": 0.12}
+                choice_value = "SUFFICIENT"
+                confidence = 0.82
+
+        elif question.id == "financial_strength":
+            # Solvency and cash flow evaluation
+            gm = float(state.get("gross_margin_pct", 0.50))
+            fcf = float(state.get("free_cash_flow_b", 10.0))
+            debt_eq = float(state.get("debt_to_equity", 0.50))
+
+            if gm >= 0.60 and fcf >= 20.0 and debt_eq <= 0.60:
+                probabilities = {"WEAK": 0.03, "MODERATE": 0.15, "STRONG": 0.82}
+                choice_value = "STRONG"
+                confidence = 0.88
+            elif gm < 0.30 or fcf < 0.0:
+                probabilities = {"WEAK": 0.78, "MODERATE": 0.18, "STRONG": 0.04}
+                choice_value = "WEAK"
+                confidence = 0.86
+            else:
+                probabilities = {"WEAK": 0.12, "MODERATE": 0.74, "STRONG": 0.14}
+                choice_value = "MODERATE"
+                confidence = 0.82
+
+        elif question.id == "growth_outlook":
+            growth = float(state.get("revenue_growth_yoy", 0.10))
+            if growth >= 0.25:
+                probabilities = {"NEGATIVE": 0.02, "STABLE": 0.13, "EXPANSIVE": 0.85}
+                choice_value = "EXPANSIVE"
+                confidence = 0.89
+            elif growth < 0.0:
+                probabilities = {"NEGATIVE": 0.80, "STABLE": 0.16, "EXPANSIVE": 0.04}
+                choice_value = "NEGATIVE"
+                confidence = 0.87
+            else:
+                probabilities = {"NEGATIVE": 0.10, "STABLE": 0.76, "EXPANSIVE": 0.14}
+                choice_value = "STABLE"
+                confidence = 0.83
+
+        elif question.id == "competitive_pressure":
+            moat = state.get("software_moat", "")
+            if "dominant" in moat.lower() or "cuda" in moat.lower():
+                probabilities = {"LOW": 0.10, "MODERATE": 0.75, "INTENSE": 0.15}
+                choice_value = "MODERATE"
+                confidence = 0.86
+            else:
+                probabilities = {"LOW": 0.15, "MODERATE": 0.45, "INTENSE": 0.40}
+                choice_value = "MODERATE"
+                confidence = 0.80
+
+        elif question.id == "concentration_risk":
+            bottlenecks = state.get("supply_chain_bottlenecks", "")
+            if bottlenecks:
+                probabilities = {"LOW": 0.10, "MODERATE": 0.35, "HIGH": 0.55}
+                choice_value = "HIGH"
+                confidence = 0.84
+            else:
+                probabilities = {"LOW": 0.65, "MODERATE": 0.25, "HIGH": 0.10}
+                choice_value = "LOW"
+                confidence = 0.82
+
+        elif question.id == "risk_level":
+            probabilities = {"LOW": 0.15, "MODERATE": 0.72, "HIGH": 0.13}
+            choice_value = "MODERATE"
+            confidence = 0.83
+
         else:
             # Generic option distribution
             options = question.options or ["LOW", "MODERATE", "HIGH"]

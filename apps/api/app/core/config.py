@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     JEV_MODEL: str = "jev-v1"
     JEV_HIGH_CONFIDENCE_THRESHOLD: float = 0.80
     JEV_MEDIUM_CONFIDENCE_THRESHOLD: float = 0.50
+    JEV_CLAIM_SUPPORTED_THRESHOLD: float = 0.80
+    JEV_CLAIM_UNVERIFIED_THRESHOLD: float = 0.50
 
     # Agent Guardrails (§17)
     MAX_RESEARCH_ITERATIONS: int = 2

@@ -280,9 +280,53 @@ async def evidence_extraction(state: ResearchState) -> ResearchState:
     return state
 
 
+async def jev_analysis(state: ResearchState) -> ResearchState:
+    """
+    Executes Jev System One questions against empirical findings (§13, §14, §16).
+    Evaluates evidence sufficiency, financial strength, moat, and calibrates claim status.
+    """
+    run_id = state["run_id"]
+    from app.jev.client import JevClient
+    from app.jev.evaluators import evaluate_research_state
+
+    client = JevClient()
+    results_dict, aggregate_confidence, routing_decision, updated_claims = await evaluate_research_state(state, client)
+
+    # Format into serializable list
+    eval_list = [
+        {
+            "question_id": r.question_id,
+            "result_type": r.result_type.value,
+            "choice_value": r.choice_value,
+            "score_value": float(r.score_value) if r.score_value is not None else None,
+            "probabilities": r.probabilities,
+            "confidence": float(r.confidence),
+            "model_version": r.model_version,
+        }
+        for r in results_dict.values()
+    ]
+
+    state["jev_evaluations"] = eval_list
+    state["claims"] = updated_claims
+    state["jev_confidence"] = aggregate_confidence
+    state["jev_routing_action"] = routing_decision.action.value
+    state["jev_routing_reason"] = routing_decision.reason
+
+    await publish_run_event(
+        run_id=run_id,
+        event_type="jev_analysis_completed",
+        payload={
+            "evaluations_count": len(eval_list),
+            "aggregate_confidence": aggregate_confidence,
+            "routing_action": routing_decision.action.value,
+        },
+    )
+    return state
+
+
 async def quality_check(state: ResearchState) -> ResearchState:
     """
-    Evaluates evidence sufficiency and enforces iteration, tool, and deadline guardrails (§17).
+    Evaluates evidence sufficiency, Jev confidence routing, and enforces guardrails (§14, §17).
     """
     run_id = state["run_id"]
     evidence_count = len(state.get("evidence", []))
@@ -293,15 +337,45 @@ async def quality_check(state: ResearchState) -> ResearchState:
 
     passed_guards = not (deadline_hit or budget_hit or iteration_hit)
 
-    # Determine status: if guardrails triggered or evidence incomplete, mark completed_partial
-    if not passed_guards or evidence_count < 2:
-        reason = "Tool limit reached" if budget_hit else ("Deadline elapsed" if deadline_hit else "Iteration limit reached")
+    # Check Jev evaluations & confidence
+    jev_evals = state.get("jev_evaluations", [])
+    jev_conf = state.get("jev_confidence")
+    if jev_conf is None and jev_evals:
+        confs = [e.get("confidence", 0.0) for e in jev_evals]
+        jev_conf = sum(confs) / len(confs) if confs else 0.0
+    jev_conf = float(jev_conf or 0.0)
+    jev_action = state.get("jev_routing_action", "continue")
+
+    # Evaluate sufficiency: requires sufficient evidence AND Jev confidence meeting high threshold
+    has_sufficient_signal = (
+        evidence_count >= 2
+        and len(jev_evals) > 0
+        and jev_conf >= settings.JEV_HIGH_CONFIDENCE_THRESHOLD
+        and jev_action != "gather_more_evidence"
+        and jev_action != "mark_insufficient"
+    )
+
+    if not passed_guards or not has_sufficient_signal:
+        if budget_hit:
+            reason = "Tool limit reached"
+        elif deadline_hit:
+            reason = "Deadline elapsed"
+        elif iteration_hit:
+            reason = "Iteration limit reached"
+        elif len(jev_evals) == 0:
+            reason = "Missing Jev evaluation signal"
+        elif jev_action in ("gather_more_evidence", "mark_insufficient"):
+            reason = state.get("jev_routing_reason", f"Low Jev confidence ({jev_conf:.2f})")
+        else:
+            reason = "Insufficient evidence depth"
+
         state["status"] = "completed_partial"
         state["quality_checks"] = {
             "passed": False,
             "status": "completed_partial",
             "reason": reason,
             "evidence_count": evidence_count,
+            "jev_confidence": jev_conf,
             "iterations": iterations,
         }
     else:
@@ -310,6 +384,7 @@ async def quality_check(state: ResearchState) -> ResearchState:
             "passed": True,
             "status": "completed",
             "evidence_count": evidence_count,
+            "jev_confidence": jev_conf,
             "iterations": iterations,
         }
 
@@ -323,19 +398,19 @@ async def quality_check(state: ResearchState) -> ResearchState:
 
 def route_after_quality_check(state: ResearchState) -> str:
     """
-    Conditional routing edge (§17):
-    If insufficient evidence AND within bounds -> route to research_more.
+    Conditional routing edge (§14, §17):
+    If insufficient evidence OR Jev confidence requires more evidence AND within bounds -> route to research_more.
     Otherwise -> route to synthesize_report.
     """
     # If deadline, tool limit, or iteration limit hit, immediately route to synthesis
     if is_deadline_exceeded(state) or is_tool_budget_exceeded(state) or is_iteration_limit_reached(state):
         return "synthesize_report"
 
-    # If evidence count is sufficient, route to synthesis
-    if len(state.get("evidence", [])) >= 2:
+    # If quality check passed cleanly, route to synthesis
+    if state.get("quality_checks", {}).get("passed", False):
         return "synthesize_report"
 
-    # Bounded research_more pass
+    # Bounded research_more pass (shared single counter)
     state["research_iterations"] = state.get("research_iterations", 0) + 1
     return "financial_research"
 
@@ -351,6 +426,7 @@ async def synthesize_report(state: ResearchState) -> ResearchState:
     news_items = state.get("news_analysis", {}).get("items", [])
     evidence = state.get("evidence", [])
     sources = state.get("sources", [])
+    jev_evals = state.get("jev_evaluations", [])
     status = state.get("status", "completed")
 
     rev = fin.get("revenue_usd_b", "N/A")
@@ -366,7 +442,7 @@ async def synthesize_report(state: ResearchState) -> ResearchState:
     if status == "completed_partial":
         sections.append(
             "> [!WARNING]\n"
-            "> **Partial Research Coverage**: Some secondary evidence paths were truncated due to execution guardrail boundaries (deadline or tool-call ceiling). Findings below represent verified primary evidence only."
+            "> **Partial Research Coverage**: Some secondary evidence paths were truncated due to execution guardrail boundaries (deadline, tool-call ceiling, or bounded Jev confidence). Findings below represent verified primary evidence only."
         )
 
     sections.append("## 1. Executive Summary")
@@ -395,14 +471,24 @@ async def synthesize_report(state: ResearchState) -> ResearchState:
     for item in news_items[:3]:
         sections.append(f"- **{item.get('headline')}** ({item.get('date', 'Recent')}): {item.get('summary')}")
 
-    sections.append("## 5. Uncertainties & Risks")
+    sections.append("## 5. Structured AI Assessments (Jev System One)")
+    if jev_evals:
+        for ev in jev_evals:
+            qid_title = ev.get("question_id", "").replace("_", " ").title()
+            val = ev.get("choice_value", "N/A")
+            conf = ev.get("confidence", 0.0)
+            sections.append(f"- **{qid_title}**: `{val}` (Confidence: {conf:.1%})")
+    else:
+        sections.append("*Jev evaluations omitted or bounded by execution limits.*")
+
+    sections.append("## 6. Uncertainties & Risks")
     if mkt.get("supply_chain_bottlenecks"):
         sections.append(f"- **Supply Chain Concentration**: {mkt.get('supply_chain_bottlenecks')}")
     sections.append("- **Regulatory & Export Scrutiny**: Global trade policy and sovereign technology regulations remain an active monitoring point.")
     if status == "completed_partial":
-        sections.append(f"- **Incomplete Verification**: Secondary market share data points bounded by {state.get('quality_checks', {}).get('reason', 'guardrails')}.")
+        sections.append(f"- **Incomplete Verification**: Secondary findings bounded by {state.get('quality_checks', {}).get('reason', 'guardrails')}.")
 
-    sections.append("## 6. Sources & Provenance")
+    sections.append("## 7. Sources & Provenance")
     for idx, src in enumerate(sources, 1):
         url = src.get("url") or "#"
         sections.append(f"{idx}. [{src.get('title')}]({url}) — *{src.get('publisher')}*")
@@ -411,12 +497,13 @@ async def synthesize_report(state: ResearchState) -> ResearchState:
 
     report_data = {
         "title": f"Investment Research: {ticker}",
-        "summary": f"{ticker} equity research with verified financial metrics, moat dynamics, and risk evaluation.",
+        "summary": f"{ticker} equity research with verified financial metrics, moat dynamics, and Jev risk evaluation.",
         "content_markdown": full_markdown,
         "ticker": ticker,
         "status": status,
         "evidence_count": len(evidence),
         "sources_count": len(sources),
+        "jev_evaluations_count": len(jev_evals),
         "completed_at": datetime.now(timezone.utc).isoformat(),
     }
     state["report"] = report_data
@@ -435,7 +522,7 @@ async def synthesize_report(state: ResearchState) -> ResearchState:
 # ---------------------------------------------------------------------------
 
 def create_research_graph() -> StateGraph:
-    """Builds and compiles the bounded LangGraph research workflow."""
+    """Builds and compiles the bounded LangGraph research workflow with Jev System One (§15, §17)."""
     workflow = StateGraph(ResearchState)
 
     # Add nodes
@@ -445,6 +532,7 @@ def create_research_graph() -> StateGraph:
     workflow.add_node("market_research", market_research)
     workflow.add_node("news_research", news_research)
     workflow.add_node("evidence_extraction", evidence_extraction)
+    workflow.add_node("jev_analysis", jev_analysis)
     workflow.add_node("quality_check", quality_check)
     workflow.add_node("synthesize_report", synthesize_report)
 
@@ -455,7 +543,8 @@ def create_research_graph() -> StateGraph:
     workflow.add_edge("financial_research", "market_research")
     workflow.add_edge("market_research", "news_research")
     workflow.add_edge("news_research", "evidence_extraction")
-    workflow.add_edge("evidence_extraction", "quality_check")
+    workflow.add_edge("evidence_extraction", "jev_analysis")
+    workflow.add_edge("jev_analysis", "quality_check")
 
     # Conditional edge out of quality_check with loop guardrails
     workflow.add_conditional_edges(

@@ -30,6 +30,10 @@ class ResearchState(TypedDict, total=False):
     news_analysis: Dict[str, Any]
 
     jev_evaluations: List[Dict[str, Any]]
+    jev_confidence: float
+    jev_routing_action: str
+    jev_routing_reason: str
+    is_insufficient_test: bool
     simulation_results: Dict[str, Any]
 
     quality_checks: Dict[str, Any]

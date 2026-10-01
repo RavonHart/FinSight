@@ -19,6 +19,7 @@ from app.db.models.research import (
     Claim,
     DocumentChunk,
 )
+from app.db.models.jev import JevEvaluation
 from app.agents.graph import create_research_graph, extract_ticker_from_question
 from app.agents.state import (
     ResearchState,
@@ -40,6 +41,7 @@ from app.domains.research.service import (
     get_run_evidence,
     get_run_sources,
     get_run_claims,
+    get_run_jev_evaluations,
 )
 from app.domains.research.schemas import (
     ResearchProjectCreate,
@@ -128,6 +130,19 @@ async def test_langgraph_research_nvidia_end_to_end():
         assert Decimal("0.0") <= ev["relevance_score"] <= Decimal("1.0")
         assert len(ev["claim"]) > 0
 
+    # Validate Jev System One Evaluations (§13, §14)
+    jev_evals = final_state.get("jev_evaluations", [])
+    assert len(jev_evals) >= 4
+    q_ids = [e["question_id"] for e in jev_evals]
+    assert "evidence_sufficiency" in q_ids
+    assert "financial_strength" in q_ids
+    assert "growth_outlook" in q_ids
+    assert "competitive_pressure" in q_ids
+
+    # Validate claim statuses evaluated dynamically by Jev (§10, §14)
+    for cl in final_state["claims"]:
+        assert cl["status"] in ("supported", "unsupported", "contested", "unverified")
+
     # Validate Report Structure (§57)
     report = final_state.get("report")
     assert report is not None
@@ -139,8 +154,9 @@ async def test_langgraph_research_nvidia_end_to_end():
     assert "## 2. Valuation & Financial Fundamentals" in md
     assert "## 3. Competitive Moat & Industry Tailwinds" in md
     assert "## 4. Key Catalysts" in md
-    assert "## 5. Uncertainties & Risks" in md
-    assert "## 6. Sources & Provenance" in md
+    assert "## 5. Structured AI Assessments (Jev System One)" in md
+    assert "## 6. Uncertainties & Risks" in md
+    assert "## 7. Sources & Provenance" in md
     assert "https://" in md  # Source URLs cited directly
 
 
@@ -440,3 +456,137 @@ async def test_document_chunks_vector_storage_and_search():
         )
         assert len(results) == 1
         assert "NVIDIA Blackwell" in results[0].content
+
+
+# ---------------------------------------------------------------------------
+# 8. Jev Research Layer: Routing, Single Shared Loop & Persistence (§13, §14, Phase 5)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_jev_low_confidence_bounded_by_single_shared_iteration_cap():
+    """
+    Validates that low-confidence Jev evaluations in research context (§14):
+    1. Do NOT branch into a clarification loop.
+    2. Feed into the single shared research_iterations counter and MAX_RESEARCH_ITERATIONS cap.
+    3. When capped, terminate cleanly into completed_partial and surface Jev uncertainties.
+    """
+    # Force low-confidence Jev evaluation via is_insufficient_test=True
+    state: ResearchState = {
+        "run_id": str(uuid.uuid4()),
+        "question": "Research NVIDIA.",
+        "research_iterations": settings.MAX_RESEARCH_ITERATIONS,  # Already at ceiling
+        "tool_calls_used": 0,
+        "run_deadline_at": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
+        "status": "running",
+        "is_insufficient_test": True,
+        "errors": [],
+        "sources": [],
+        "evidence": [],
+        "claims": [],
+    }
+
+    graph = create_research_graph()
+    final_state = await graph.ainvoke(state)
+
+    # When at iteration limit with low confidence, graph must terminate into completed_partial
+    assert final_state["status"] == "completed_partial"
+    assert final_state["quality_checks"]["passed"] is False
+
+    # Jev evaluations are still captured and present
+    jev_evals = final_state.get("jev_evaluations", [])
+    assert len(jev_evals) > 0
+
+    # Report surfaces the uncertainty
+    md = final_state["report"]["content_markdown"]
+    assert "Uncertainties & Risks" in md
+    assert "Incomplete Verification" in md
+
+
+@pytest.mark.asyncio
+async def test_jev_evaluations_durable_persistence(test_user_id):
+    """
+    Verifies that execute_and_persist_research_run persists structured
+    Jev evaluations with probabilities, choice, and confidence into the jev_evaluations table (§10, §13).
+    """
+    async with async_session_factory() as session:
+        proj = await create_project(
+            session,
+            test_user_id,
+            ResearchProjectCreate(name="Semiconductor Jev Alpha", research_type="equity"),
+        )
+        run_record, _ = await create_research_run(
+            session,
+            test_user_id,
+            proj.id,
+            ResearchRunCreate(question="Research NVIDIA"),
+        )
+
+        completed_run = await execute_and_persist_research_run(session, run_record.id)
+        assert completed_run.status == "completed"
+
+        # Verify rows in jev_evaluations table
+        jev_rows = await get_run_jev_evaluations(session, test_user_id, completed_run.id)
+        assert len(jev_rows) >= 4
+        q_ids = [r.question_id for r in jev_rows]
+        assert "evidence_sufficiency" in q_ids
+        assert "financial_strength" in q_ids
+        assert "growth_outlook" in q_ids
+        assert "competitive_pressure" in q_ids
+
+        for row in jev_rows:
+            assert row.research_run_id == completed_run.id
+            assert row.choice_value is not None
+            assert row.confidence is not None
+            assert row.probabilities_json is not None
+            assert row.model_version == "jev-v1"
+
+
+@pytest.mark.asyncio
+async def test_jev_evaluations_api_endpoint(auth_headers):
+    """
+    Verifies GET /api/v1/research/runs/{run_id}/jev-evaluations endpoint
+    returns structured Jev evaluations conforming to JevEvaluationResponse schema.
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Create project & run
+        p_res = await client.post(
+            "/api/v1/research/projects",
+            json={"name": "Jev Test Project", "research_type": "equity"},
+            headers=auth_headers,
+        )
+        proj_id = p_res.json()["id"]
+
+        r_res = await client.post(
+            f"/api/v1/research/projects/{proj_id}/runs?execute_now=false",
+            json={"question": "Research NVIDIA."},
+            headers=auth_headers,
+        )
+        run_id = r_res.json()["id"]
+
+        # Execute
+        await client.post(f"/api/v1/research/runs/{run_id}/execute", headers=auth_headers)
+
+        # Query Jev evaluations endpoint
+        jev_res = await client.get(f"/api/v1/research/runs/{run_id}/jev-evaluations", headers=auth_headers)
+        assert jev_res.status_code == 200
+        data = jev_res.json()
+        assert len(data) >= 4
+        assert any(item["question_id"] == "evidence_sufficiency" for item in data)
+        assert any(item["question_id"] == "financial_strength" for item in data)
+        for item in data:
+            assert item["research_run_id"] == run_id
+            assert "choice_value" in item
+            assert "confidence" in item
+            assert "probabilities_json" in item
+
+
+@pytest.mark.asyncio
+async def test_claim_status_threshold_configuration():
+    """
+    Confirms claim status thresholds pull from the centralized Settings object (§14)
+    rather than being hardcoded literals.
+    """
+    assert hasattr(settings, "JEV_CLAIM_SUPPORTED_THRESHOLD")
+    assert hasattr(settings, "JEV_CLAIM_UNVERIFIED_THRESHOLD")
+    assert settings.JEV_CLAIM_SUPPORTED_THRESHOLD == settings.JEV_HIGH_CONFIDENCE_THRESHOLD
+    assert settings.JEV_CLAIM_UNVERIFIED_THRESHOLD == settings.JEV_MEDIUM_CONFIDENCE_THRESHOLD

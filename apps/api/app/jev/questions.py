@@ -84,6 +84,33 @@ QUESTIONS_REGISTRY: Dict[str, JevQuestionDefinition] = {
         high_threshold=0.80,
         medium_threshold=0.50,
     ),
+    "concentration_risk": JevQuestionDefinition(
+        id="concentration_risk",
+        description="Evaluates revenue, customer, or supply chain concentration risks",
+        result_type=JevResultType.CHOICE,
+        options=["LOW", "MODERATE", "HIGH"],
+        version="1.0.0",
+        high_threshold=0.80,
+        medium_threshold=0.50,
+    ),
+    "growth_outlook": JevQuestionDefinition(
+        id="growth_outlook",
+        description="Evaluates forward multi-year revenue and TAM expansion trajectory",
+        result_type=JevResultType.CHOICE,
+        options=["NEGATIVE", "STABLE", "EXPANSIVE"],
+        version="1.0.0",
+        high_threshold=0.80,
+        medium_threshold=0.50,
+    ),
+    "competitive_pressure": JevQuestionDefinition(
+        id="competitive_pressure",
+        description="Assesses structural moat defense against rival technologies and hyperscaler substitution",
+        result_type=JevResultType.CHOICE,
+        options=["LOW", "MODERATE", "INTENSE"],
+        version="1.0.0",
+        high_threshold=0.80,
+        medium_threshold=0.50,
+    ),
 }
 
 

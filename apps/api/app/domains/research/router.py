@@ -21,6 +21,7 @@ from app.domains.research.schemas import (
     EvidenceResponse,
     SourceResponse,
     ClaimResponse,
+    JevEvaluationResponse,
 )
 from app.domains.research.service import (
     create_project,
@@ -35,6 +36,7 @@ from app.domains.research.service import (
     get_run_evidence,
     get_run_sources,
     get_run_claims,
+    get_run_jev_evaluations,
 )
 
 research_router = APIRouter(prefix="/research", tags=["Research"])
@@ -207,6 +209,17 @@ async def get_run_claims_endpoint(
     """Retrieves atomic claims categorized by fact, analysis, scenario, uncertainty."""
     user_uuid = current_user.id if isinstance(current_user.id, uuid.UUID) else uuid.UUID(str(current_user.id))
     return await get_run_claims(db, user_uuid, run_id)
+
+
+@research_router.get("/runs/{run_id}/jev-evaluations", response_model=List[JevEvaluationResponse])
+async def get_run_jev_evaluations_endpoint(
+    run_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieves Jev System One question evaluations for a run (§10, §13, §14)."""
+    user_uuid = current_user.id if isinstance(current_user.id, uuid.UUID) else uuid.UUID(str(current_user.id))
+    return await get_run_jev_evaluations(db, user_uuid, run_id)
 
 
 # ---------------------------------------------------------------------------

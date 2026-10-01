@@ -17,6 +17,7 @@ from app.db.models.research import (
     Claim,
     ClaimSource,
 )
+from app.db.models.jev import JevEvaluation
 from app.domains.research.schemas import (
     ResearchProjectCreate,
     ResearchRunCreate,
@@ -317,20 +318,39 @@ async def execute_and_persist_research_run(
         )
         db.add(ev_obj)
 
-    # 4. Claims
+    # 4. Claims (with dynamic status evaluated by Jev)
     for cl in final_state.get("claims", []):
         cl_uuid = uuid.uuid4()
+        conf_val = cl.get("confidence")
         claim_obj = Claim(
             id=cl_uuid,
             research_run_id=run.id,
             claim_text=cl.get("claim_text", ""),
             claim_type=cl.get("claim_type", "fact"),
-            confidence=Decimal(str(cl.get("confidence", "0.900"))),
-            status="supported",
+            confidence=Decimal(str(round(float(conf_val), 3))) if conf_val is not None else None,
+            status=cl.get("status", "supported"),
         )
         db.add(claim_obj)
 
-    # 5. Update ResearchRun record
+    # 5. Jev System One Evaluations (§10, §13, §14)
+    for jev_dict in final_state.get("jev_evaluations", []):
+        jev_obj = JevEvaluation(
+            id=uuid.uuid4(),
+            research_run_id=run.id,
+            financial_profile_id=None,
+            question_id=jev_dict.get("question_id", "unknown"),
+            input_state_json={"ticker": final_state.get("ticker", "NVDA")},
+            result_type=jev_dict.get("result_type", "choice"),
+            choice_value=jev_dict.get("choice_value"),
+            score_value=Decimal(str(jev_dict["score_value"])) if jev_dict.get("score_value") is not None else None,
+            probabilities_json=jev_dict.get("probabilities"),
+            confidence=Decimal(str(round(jev_dict.get("confidence", 0.80), 4))),
+            model_version=jev_dict.get("model_version", "jev-v1"),
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(jev_obj)
+
+    # 6. Update ResearchRun record
     report_dict = final_state.get("report", {})
     run.status = final_state.get("status", "completed")
     run.completed_at = datetime.now(timezone.utc)
@@ -340,9 +360,10 @@ async def execute_and_persist_research_run(
         "report": report_dict,
         "quality_checks": final_state.get("quality_checks", {}),
         "ticker": final_state.get("ticker", "NVDA"),
-        "models_used": ["langgraph-researcher-v1"],
+        "models_used": ["langgraph-researcher-v1", "jev-v1"],
         "source_count": len(final_state.get("sources", [])),
         "claims_count": len(final_state.get("claims", [])),
+        "jev_evaluations_count": len(final_state.get("jev_evaluations", [])),
     }
     run.usage_metadata_json = {
         "tool_calls_used": final_state.get("tool_calls_used", 0),
@@ -427,6 +448,22 @@ async def get_run_claims(
         select(Claim)
         .where(Claim.research_run_id == run_id)
         .order_by(desc(Claim.confidence))
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_run_jev_evaluations(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    run_id: uuid.UUID,
+) -> List[JevEvaluation]:
+    """Retrieves durable Jev evaluations for a run (§10, §13)."""
+    await get_research_run(db, user_id, run_id)
+    stmt = (
+        select(JevEvaluation)
+        .where(JevEvaluation.research_run_id == run_id)
+        .order_by(JevEvaluation.created_at)
     )
     result = await db.execute(stmt)
     return list(result.scalars().all())
