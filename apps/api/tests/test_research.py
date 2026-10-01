@@ -1,4 +1,5 @@
 import uuid
+import asyncio
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 import pytest
@@ -590,3 +591,90 @@ async def test_claim_status_threshold_configuration():
     assert hasattr(settings, "JEV_CLAIM_UNVERIFIED_THRESHOLD")
     assert settings.JEV_CLAIM_SUPPORTED_THRESHOLD == settings.JEV_HIGH_CONFIDENCE_THRESHOLD
     assert settings.JEV_CLAIM_UNVERIFIED_THRESHOLD == settings.JEV_MEDIUM_CONFIDENCE_THRESHOLD
+
+
+@pytest.mark.asyncio
+async def test_sse_reconnect_mid_run_replay_and_live_subscribe(test_user_id, auth_headers):
+    """
+    Validates §23 Replay-Then-Subscribe under a reconnect:
+    1. A run is already underway (status='running', some tasks persisted in DB).
+    2. A client connects to /stream for the first time or reconnects.
+    3. The initial 'snapshot' frame accurately replays the mid-run state.
+    4. Subsequent live events published to Redis stream to the client seamlessly.
+    """
+    from app.agents.events import publish_run_event
+
+    async with async_session_factory() as session:
+        proj = await create_project(
+            session,
+            test_user_id,
+            ResearchProjectCreate(name="Reconnect Test Project", research_type="equity"),
+        )
+        run_record, _ = await create_research_run(
+            session,
+            test_user_id,
+            proj.id,
+            ResearchRunCreate(question="Research NVIDIA"),
+        )
+        # Set mid-run state
+        run_record.status = "running"
+        t1 = ResearchTask(
+            id=uuid.uuid4(),
+            research_run_id=run_record.id,
+            task_type="financial_analysis",
+            title="Evaluate financial metrics",
+            status="completed",
+            assigned_agent="FinancialAgent",
+            input_json={},
+            output_json={},
+        )
+        t2 = ResearchTask(
+            id=uuid.uuid4(),
+            research_run_id=run_record.id,
+            task_type="market_analysis",
+            title="Analyze competitive positioning",
+            status="running",
+            assigned_agent="MarketAgent",
+            input_json={},
+            output_json={},
+        )
+        session.add_all([t1, t2])
+        await session.commit()
+        run_id_str = str(run_record.id)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Schedule background live events while client connects to SSE stream
+        async def publish_live_events():
+            await asyncio.sleep(0.3)
+            await publish_run_event(run_id_str, "task_completed", {"task": "market_analysis"})
+            await asyncio.sleep(0.1)
+            await publish_run_event(run_id_str, "run_completed", {"status": "completed"})
+
+        pub_task = asyncio.create_task(publish_live_events())
+
+        # Connect to SSE stream (replays DB snapshot, subscribes to Redis, receives live events until end)
+        stream_res = await client.get(f"/api/v1/research/runs/{run_id_str}/stream", headers=auth_headers)
+        await pub_task
+
+        assert stream_res.status_code == 200
+        assert "text/event-stream" in stream_res.headers["content-type"]
+        content = stream_res.text
+
+        # 1. Verify mid-run snapshot replay
+        assert "event: snapshot" in content
+        assert "run_snapshot" in content
+        assert "running" in content
+        assert "financial_analysis" in content or "Evaluate financial metrics" in content
+
+        # 2. Verify live events received after replay
+        assert "event: task_completed" in content
+        assert "market_analysis" in content
+        assert "event: run_completed" in content
+        assert "event: end" in content
+
+    # Cleanup DB state so test run does not linger as running
+    async with async_session_factory() as cleanup_session:
+        r = await cleanup_session.get(ResearchRun, uuid.UUID(run_id_str))
+        if r:
+            r.status = "completed"
+            await cleanup_session.commit()

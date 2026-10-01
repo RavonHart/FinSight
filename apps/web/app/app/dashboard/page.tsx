@@ -155,21 +155,29 @@ export default function DashboardPage() {
           </Link>
 
           {/* Research Workspace Card */}
-          <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition flex flex-col justify-between">
+          <Link
+            href="/app/research"
+            className="p-6 rounded-2xl border border-indigo-500/30 bg-slate-900/60 hover:border-indigo-500/60 hover:bg-slate-900/90 transition flex flex-col justify-between group shadow-lg shadow-indigo-500/5"
+          >
             <div>
-              <div className="h-10 w-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4">
+              <div className="h-10 w-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 group-hover:scale-105 transition">
                 <Search className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-bold text-white">Agentic Research</h3>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-lg font-bold text-white group-hover:text-indigo-300 transition">Research Workspace</h3>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+                  Active
+                </span>
+              </div>
               <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-                LangGraph-orchestrated workflows with Jev confidence judgment and immutable source provenance.
+                LangGraph-orchestrated workflows with Jev System One judgments, Replay-Then-Subscribe SSE streaming, and three-panel provenance workspace.
               </p>
             </div>
-            <div className="mt-6 pt-4 border-t border-slate-800/60 flex items-center justify-between">
-              <span className="text-xs text-indigo-400 font-medium">Phase 4 &amp; 5</span>
-              <span className="text-xs text-slate-500">Coming next</span>
+            <div className="mt-6 pt-4 border-t border-slate-800/60 flex items-center justify-between text-xs font-semibold text-indigo-400">
+              <span>Launch Research Workspace</span>
+              <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
             </div>
-          </div>
+          </Link>
 
           {/* Learning Card */}
           <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition flex flex-col justify-between">

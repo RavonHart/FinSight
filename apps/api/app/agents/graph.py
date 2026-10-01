@@ -105,6 +105,8 @@ async def generate_plan(state: ResearchState) -> ResearchState:
         {"id": f"task-fin-{run_id[:6]}", "task_type": "financial_analysis", "title": f"Evaluate {ticker} financial metrics & valuation", "status": "pending"},
         {"id": f"task-mkt-{run_id[:6]}", "task_type": "market_analysis", "title": f"Analyze {ticker} competitive positioning & moat", "status": "pending"},
         {"id": f"task-nws-{run_id[:6]}", "task_type": "news_analysis", "title": f"Examine recent catalysts & regulatory risks", "status": "pending"},
+        {"id": f"task-evd-{run_id[:6]}", "task_type": "evidence_validation", "title": f"Extract evidence passages & verify sources", "status": "pending"},
+        {"id": f"task-jev-{run_id[:6]}", "task_type": "jev_analysis", "title": f"Execute Jev System One calibrated assessments", "status": "pending"},
         {"id": f"task-syn-{run_id[:6]}", "task_type": "synthesis", "title": f"Synthesize evidence-backed report with provenance", "status": "pending"},
     ]
     state["tasks"] = tasks
@@ -193,6 +195,12 @@ async def news_research(state: ResearchState) -> ResearchState:
 async def evidence_extraction(state: ResearchState) -> ResearchState:
     """Extracts atomic claims, evidence passages, and immutable sources with URLs (§16)."""
     run_id = state["run_id"]
+    await publish_run_event(
+        run_id=run_id,
+        event_type="task_started",
+        payload={"task_type": "evidence_validation"},
+    )
+
     ticker = state.get("ticker", "NVDA")
     fin = state.get("financial_analysis", {})
     mkt = state.get("market_analysis", {})
@@ -277,6 +285,11 @@ async def evidence_extraction(state: ResearchState) -> ResearchState:
             "claims_count": len(claims),
         },
     )
+    await publish_run_event(
+        run_id=run_id,
+        event_type="task_completed",
+        payload={"task_type": "evidence_validation", "sources_count": len(sources), "evidence_count": len(evidence)},
+    )
     return state
 
 
@@ -286,6 +299,11 @@ async def jev_analysis(state: ResearchState) -> ResearchState:
     Evaluates evidence sufficiency, financial strength, moat, and calibrates claim status.
     """
     run_id = state["run_id"]
+    await publish_run_event(
+        run_id=run_id,
+        event_type="task_started",
+        payload={"task_type": "jev_analysis"},
+    )
     from app.jev.client import JevClient
     from app.jev.evaluators import evaluate_research_state
 
@@ -320,6 +338,11 @@ async def jev_analysis(state: ResearchState) -> ResearchState:
             "aggregate_confidence": aggregate_confidence,
             "routing_action": routing_decision.action.value,
         },
+    )
+    await publish_run_event(
+        run_id=run_id,
+        event_type="task_completed",
+        payload={"task_type": "jev_analysis", "evaluations_count": len(eval_list)},
     )
     return state
 
@@ -420,6 +443,11 @@ async def synthesize_report(state: ResearchState) -> ResearchState:
     Synthesizes the comprehensive, source-backed report with provenance and uncertainties callouts (§16, §17).
     """
     run_id = state["run_id"]
+    await publish_run_event(
+        run_id=run_id,
+        event_type="task_started",
+        payload={"task_type": "synthesis"},
+    )
     ticker = state.get("ticker", "NVDA")
     fin = state.get("financial_analysis", {})
     mkt = state.get("market_analysis", {})
@@ -507,6 +535,12 @@ async def synthesize_report(state: ResearchState) -> ResearchState:
         "completed_at": datetime.now(timezone.utc).isoformat(),
     }
     state["report"] = report_data
+
+    await publish_run_event(
+        run_id=run_id,
+        event_type="task_completed",
+        payload={"task_type": "synthesis"},
+    )
 
     await publish_run_event(
         run_id=run_id,

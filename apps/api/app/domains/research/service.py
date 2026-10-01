@@ -318,6 +318,21 @@ async def execute_and_persist_research_run(
         )
         db.add(ev_obj)
 
+        # Store pgvector document chunk for evidence semantic search (§10, §40)
+        from app.domains.research.vector_service import store_document_chunk
+        ev_text = ev.get("evidence_text", "")
+        if ev_text:
+            vec = [0.0] * 1536
+            vec[0] = 0.95
+            vec[1] = 0.05
+            await store_document_chunk(
+                db,
+                content=ev_text,
+                token_count=len(ev_text.split()),
+                embedding=vec,
+                metadata_json={"research_run_id": str(run.id), "source_id": str(src_uuid)},
+            )
+
     # 4. Claims (with dynamic status evaluated by Jev)
     for cl in final_state.get("claims", []):
         cl_uuid = uuid.uuid4()

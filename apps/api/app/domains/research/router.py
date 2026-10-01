@@ -243,7 +243,28 @@ async def stream_run_events(
     tasks = await get_run_tasks(db, user_uuid, run_id)
 
     async def event_generator() -> AsyncGenerator[str, None]:
-        # 1. Replay current database snapshot
+        # If run is already completed or failed, replay snapshot and finish immediately
+        if run.status in ("completed", "completed_partial", "failed", "cancelled"):
+            snapshot = {
+                "event": "run_snapshot",
+                "run_id": str(run.id),
+                "status": run.status,
+                "research_iterations": run.research_iterations,
+                "tool_calls_used": run.tool_calls_used,
+                "tasks": [{"id": str(t.id), "title": t.title, "status": t.status} for t in tasks],
+                "report": run.model_metadata_json.get("report") if run.model_metadata_json else None,
+            }
+            yield f"event: snapshot\ndata: {json.dumps(snapshot)}\n\n"
+            yield f"event: end\ndata: {json.dumps({'status': run.status})}\n\n"
+            return
+
+        # 1. Subscribe to Redis Pub/Sub FIRST so no events are dropped while streaming
+        channel_name = f"research_run:{run.id}"
+        redis_client = aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
+        pubsub = redis_client.pubsub()
+        await pubsub.subscribe(channel_name)
+
+        # 2. Replay current database snapshot
         snapshot = {
             "event": "run_snapshot",
             "run_id": str(run.id),
@@ -254,17 +275,6 @@ async def stream_run_events(
             "report": run.model_metadata_json.get("report") if run.model_metadata_json else None,
         }
         yield f"event: snapshot\ndata: {json.dumps(snapshot)}\n\n"
-
-        # If run is already completed or failed, finish stream immediately
-        if run.status in ("completed", "completed_partial", "failed", "cancelled"):
-            yield f"event: end\ndata: {json.dumps({'status': run.status})}\n\n"
-            return
-
-        # 2. Subscribe to Redis Pub/Sub for live updates
-        channel_name = f"research_run:{run.id}"
-        redis_client = aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
-        pubsub = redis_client.pubsub()
-        await pubsub.subscribe(channel_name)
 
         try:
             while True:
