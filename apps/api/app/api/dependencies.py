@@ -1,3 +1,4 @@
+import uuid
 from typing import AsyncGenerator, Optional
 import redis.asyncio as aioredis
 from fastapi import Depends, HTTPException, Header, status
@@ -60,13 +61,14 @@ async def get_current_active_user(
     Resolves the authenticated user from the database or synchronizes on first login.
     Guarantees user exists in local PostgreSQL schema and is active.
     """
-    result = await db.execute(select(User).where(User.id == current_user.id))
+    user_uuid = uuid.UUID(current_user.id) if isinstance(current_user.id, str) else current_user.id
+    result = await db.execute(select(User).where((User.id == user_uuid) | (User.email == current_user.email)))
     user = result.scalar_one_or_none()
 
     if not user:
         # Just-in-time synchronization for OAuth/external Supabase users
         user = User(
-            id=current_user.id,
+            id=user_uuid,
             email=current_user.email,
             name=current_user.name or current_user.email.split("@")[0],
             auth_provider=current_user.auth_provider,

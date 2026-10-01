@@ -1,11 +1,15 @@
 from fastapi import APIRouter
 from app.domains.users.router import auth_router, admin_router
+from app.domains.profiles.router import profile_router
+from app.domains.goals.router import goals_router
 
 api_router = APIRouter(prefix="/api/v1")
 
-# Mount authentication & admin routers
+# Mount domain routers
 api_router.include_router(auth_router)
 api_router.include_router(admin_router)
+api_router.include_router(profile_router)
+api_router.include_router(goals_router)
 
 
 @api_router.get("/status")
@@ -16,7 +20,8 @@ async def get_status():
         "api_prefix": "/api/v1",
         "features": {
             "auth": "active",
-            "profiles": "ready",
+            "profiles": "active",
+            "goals": "active",
             "portfolios": "ready",
             "research": "ready",
             "simulations": "ready",

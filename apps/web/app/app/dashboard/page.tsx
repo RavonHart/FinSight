@@ -105,21 +105,29 @@ export default function DashboardPage() {
         {/* Phase Modules Grid */}
         <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Financial Profile Card */}
-          <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition flex flex-col justify-between">
+          <Link
+            href="/app/profile"
+            className="p-6 rounded-2xl border border-blue-500/30 bg-slate-900/60 hover:border-blue-500/60 hover:bg-slate-900/90 transition flex flex-col justify-between group shadow-lg shadow-blue-500/5"
+          >
             <div>
-              <div className="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-4">
+              <div className="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-4 group-hover:scale-105 transition">
                 <User className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-bold text-white">Financial Profile</h3>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-lg font-bold text-white group-hover:text-blue-300 transition">Financial Profile</h3>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+                  Active
+                </span>
+              </div>
               <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-                Structured risk questionnaire with Jev confidence scoring and personalized financial goals.
+                Structured risk questionnaire, Jev calibrated confidence assessment, and financial goals management.
               </p>
             </div>
-            <div className="mt-6 pt-4 border-t border-slate-800/60 flex items-center justify-between">
-              <span className="text-xs text-blue-400 font-medium">Phase 2</span>
-              <span className="text-xs text-slate-500">Coming next</span>
+            <div className="mt-6 pt-4 border-t border-slate-800/60 flex items-center justify-between text-xs font-semibold text-blue-400">
+              <span>View Profile & Goals</span>
+              <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
             </div>
-          </div>
+          </Link>
 
           {/* Portfolio Card */}
           <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition flex flex-col justify-between">

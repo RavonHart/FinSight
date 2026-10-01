@@ -14,12 +14,12 @@ develop-eggs/
 dist/
 downloads/
 eggs/
-.eggs/
-lib/
+# Python venv
+env/
+venv/
+.venv/
 lib64/
-parts/
-sdist/
-var/
+!apps/web/lib/
 wheels/
 *.egg-info/
 .installed.cfg

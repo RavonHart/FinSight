@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TrendingUp, Lock, Mail, User, AlertCircle, ArrowRight, Loader2, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/components/auth-context";
+import { formatErrorDetail } from "@/lib/auth";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -37,7 +38,8 @@ export default function SignupPage() {
       await signup(email, password, name);
       router.push("/app/dashboard");
     } catch (err: any) {
-      setError(err.message || "Failed to create an account. Please try again.");
+      const msg = err?.message ?? err;
+      setError(typeof msg === "object" ? formatErrorDetail(msg) : String(msg || "Failed to create an account. Please try again."));
     } finally {
       setLoading(false);
     }

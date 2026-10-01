@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TrendingUp, Lock, Mail, AlertCircle, ArrowRight, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth-context";
+import { formatErrorDetail } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,7 +25,8 @@ export default function LoginPage() {
       await login(email, password);
       router.push("/app/dashboard");
     } catch (err: any) {
-      setError(err.message || "Failed to sign in. Please verify your credentials.");
+      const msg = err?.message ?? err;
+      setError(typeof msg === "object" ? formatErrorDetail(msg) : String(msg || "Failed to sign in. Please verify your credentials."));
     } finally {
       setLoading(false);
     }
