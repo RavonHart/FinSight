@@ -22,6 +22,8 @@ AsyncSessionLocal = async_sessionmaker(
     class_=AsyncSession
 )
 
+async_session_factory = AsyncSessionLocal
+
 # Sync engine for Celery / Alembic migrations
 sync_engine = create_engine(
     settings.DATABASE_URL_SYNC,

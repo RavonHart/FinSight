@@ -1,5 +1,9 @@
+import uuid
+import asyncio
 from app.workers.celery_app import celery_app
 from app.core.logging import logger
+from app.db.session import async_session_factory
+from app.domains.research.service import execute_and_persist_research_run
 
 
 @celery_app.task(name="app.workers.tasks.ping")
@@ -11,10 +15,21 @@ def ping() -> str:
 
 @celery_app.task(name="app.workers.tasks.research_run", bind=True, max_retries=2)
 def research_run(self, run_id: str):
-    """Executes asynchronous LangGraph research workflow for a given run_id."""
-    logger.info(f"Starting research run: {run_id}")
-    # Will be connected to LangGraph research graph in Phase 4
-    return {"status": "completed", "run_id": run_id}
+    """Executes asynchronous LangGraph research workflow for a given run_id (§16, §38)."""
+    logger.info(f"Starting Celery research run worker execution: {run_id}")
+    run_uuid = uuid.UUID(run_id)
+
+    async def _execute():
+        async with async_session_factory() as session:
+            return await execute_and_persist_research_run(session, run_uuid)
+
+    try:
+        result = asyncio.run(_execute())
+        logger.info(f"Research run {run_id} completed with status {result.status}")
+        return {"status": result.status, "run_id": run_id}
+    except Exception as exc:
+        logger.error(f"Research run worker failed for {run_id}: {exc}")
+        raise self.retry(exc=exc, countdown=5)
 
 
 @celery_app.task(name="app.workers.tasks.refresh_holding_prices")

@@ -16,6 +16,10 @@ pyjwt[crypto]>=2.8.0
 pgvector>=0.2.5
 python-dotenv>=1.0.1
 
+# AI & Agentic Orchestration
+langgraph>=0.2.0
+langchain-core>=0.3.0
+
 # Testing
 pytest>=8.2.0
 pytest-asyncio>=0.23.7

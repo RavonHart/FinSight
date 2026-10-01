@@ -47,6 +47,8 @@ services:
       PORT: 8000
     ports:
       - "8000:8000"
+    volumes:
+      - ./apps/api:/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -65,6 +67,8 @@ services:
     container_name: finsight-worker
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]
     restart: always
+    volumes:
+      - ./apps/api:/app
     env_file:
       - .env
     environment:
@@ -84,6 +88,8 @@ services:
     container_name: finsight-beat
     command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=info"]
     restart: always
+    volumes:
+      - ./apps/api:/app
     env_file:
       - .env
     environment:
