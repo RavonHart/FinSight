@@ -73,6 +73,25 @@ export default function OnboardingPage() {
       try {
         const qList = await getQuestionnaire();
         setQuestions(qList);
+        setAnswers((prev) => {
+          const updated = { ...prev };
+          qList.forEach((q) => {
+            const hasOptions = q.options && q.options.length > 0;
+            if (hasOptions) {
+              const validValues = q.options!.map((o) => o.value);
+              if (!updated[q.id] || typeof updated[q.id] !== "string" || !validValues.includes(updated[q.id])) {
+                updated[q.id] = q.default_value && validValues.includes(q.default_value)
+                  ? q.default_value
+                  : q.options![0].value;
+              }
+            } else {
+              if (updated[q.id] === undefined || typeof updated[q.id] !== "number") {
+                updated[q.id] = typeof q.default_value === "number" ? q.default_value : (prev[q.id] ?? 0);
+              }
+            }
+          });
+          return updated;
+        });
       } catch (err: any) {
         setError(err.message || "Failed to load questionnaire");
       } finally {
@@ -98,7 +117,7 @@ export default function OnboardingPage() {
   const progressPercent = questions.length > 0 ? Math.round(((currentStep + 1) / questions.length) * 100) : 0;
 
   const handleSelectOption = (questionId: string, value: string) => {
-    setAnswers((prev) => ({ ...prev, [questionId]: value }));
+    setAnswers((prev) => ({ ...prev, [questionId]: String(value) }));
   };
 
   const handleNumberChange = (questionId: string, value: string) => {
@@ -122,7 +141,14 @@ export default function OnboardingPage() {
     setIsSubmitting(true);
     setError(null);
     try {
-      const res = await submitAssessment(answers);
+      const sanitizedAnswers: Record<string, any> = { ...answers };
+      questions.forEach((q) => {
+        const hasOptions = q.options && q.options.length > 0;
+        if (hasOptions && sanitizedAnswers[q.id] !== undefined) {
+          sanitizedAnswers[q.id] = String(sanitizedAnswers[q.id]);
+        }
+      });
+      const res = await submitAssessment(sanitizedAnswers);
       setResult(res);
     } catch (err: any) {
       setError(err.message || "Assessment evaluation failed. Please verify your inputs.");
@@ -432,7 +458,7 @@ export default function OnboardingPage() {
                 </div>
 
                 {/* Input Controls */}
-                {currentQ.input_type === "select" && currentQ.options ? (
+                {(Boolean(currentQ.options && currentQ.options.length > 0) || currentQ.question_type === "select" || currentQ.input_type === "select") && currentQ.options ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                     {currentQ.options.map((opt) => {
                       const isSelected = answers[currentQ.id] === opt.value;

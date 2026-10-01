@@ -2,7 +2,7 @@ import uuid
 from decimal import Decimal
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class QuestionnaireOption(BaseModel):
@@ -36,6 +36,56 @@ class ProfileAnswersSubmission(BaseModel):
     income_stability: str = Field(..., description="'unstable', 'moderate', or 'very_stable'")
     clarification_response: Optional[str] = None
     is_conflicting_test: Optional[bool] = False  # Used for testing low-confidence routing edge-cases
+
+    @field_validator(
+        "investment_horizon",
+        "primary_goal",
+        "experience_level",
+        "liquidity_requirement",
+        "reaction_to_market_drop",
+        "emergency_fund_coverage",
+        "income_stability",
+        mode="before"
+    )
+    @classmethod
+    def coerce_choice_fields(cls, v: Any, info) -> str:
+        if v is None:
+            return ""
+
+        option_choices = {
+            "investment_horizon": ["short", "medium", "long"],
+            "primary_goal": ["wealth_growth", "retirement", "capital_preservation", "major_purchase"],
+            "experience_level": ["beginner", "intermediate", "advanced"],
+            "liquidity_requirement": ["immediate", "moderate", "low"],
+            "reaction_to_market_drop": ["panic_sell", "hold_steady", "buy_more"],
+            "emergency_fund_coverage": ["less_than_3_months", "3_to_6_months", "more_than_6_months"],
+            "income_stability": ["unstable", "moderate", "very_stable"],
+        }
+
+        valid_opts = option_choices.get(info.field_name, [])
+
+        if isinstance(v, str):
+            v_clean = v.strip().lower()
+            if v_clean in valid_opts:
+                return v_clean
+            if v_clean.isdigit():
+                idx = int(v_clean)
+                if 1 <= idx <= len(valid_opts):
+                    return valid_opts[idx - 1]
+                if 0 <= idx < len(valid_opts):
+                    return valid_opts[idx]
+            return v_clean
+
+        if isinstance(v, (int, float)):
+            idx = int(v)
+            if 1 <= idx <= len(valid_opts):
+                return valid_opts[idx - 1]
+            if 0 <= idx < len(valid_opts):
+                return valid_opts[idx]
+            if valid_opts:
+                return valid_opts[0]
+
+        return str(v)
 
 
 class JevDimensionBreakdown(BaseModel):

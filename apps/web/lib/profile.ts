@@ -12,13 +12,15 @@ export interface QuestionnaireItem {
   title: string;
   description: string;
   why_it_matters: string;
-  input_type: "number" | "select" | "currency";
+  question_type?: "numeric" | "select" | string;
+  input_type?: "number" | "select" | "currency" | string;
   options?: QuestionnaireOption[];
+  default_value?: any;
   min_value?: number;
   max_value?: number;
   step?: number;
   unit?: string;
-  required: boolean;
+  required?: boolean;
 }
 
 export interface JevDimensionSummary {
