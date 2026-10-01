@@ -130,21 +130,29 @@ export default function DashboardPage() {
           </Link>
 
           {/* Portfolio Card */}
-          <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition flex flex-col justify-between">
+          <Link
+            href="/app/portfolio"
+            className="p-6 rounded-2xl border border-emerald-500/30 bg-slate-900/60 hover:border-emerald-500/60 hover:bg-slate-900/90 transition flex flex-col justify-between group shadow-lg shadow-emerald-500/5"
+          >
             <div>
-              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4">
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4 group-hover:scale-105 transition">
                 <Briefcase className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-bold text-white">Portfolio Analysis</h3>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-lg font-bold text-white group-hover:text-emerald-300 transition">Portfolio Analysis</h3>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+                  Active
+                </span>
+              </div>
               <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-                Manual asset recording with deterministic pure-Python calculation of CAGR, XIRR, and asset allocations.
+                Deterministic Financial Engine with pure-Decimal calculations of valuations, allocations, sector exposures, and XIRR.
               </p>
             </div>
-            <div className="mt-6 pt-4 border-t border-slate-800/60 flex items-center justify-between">
-              <span className="text-xs text-emerald-400 font-medium">Phase 3</span>
-              <span className="text-xs text-slate-500">Coming next</span>
+            <div className="mt-6 pt-4 border-t border-slate-800/60 flex items-center justify-between text-xs font-semibold text-emerald-400">
+              <span>View Portfolios &amp; Analytics</span>
+              <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
             </div>
-          </div>
+          </Link>
 
           {/* Research Workspace Card */}
           <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition flex flex-col justify-between">
