@@ -155,7 +155,7 @@ export const EvidenceProvenancePanel: React.FC<EvidenceProvenancePanelProps> = (
           <>
             {sources.length > 0 ? (
               sources.map((src, index) => {
-                const citeNum = index + 1;
+                const citeNum = src.citation_index || index + 1;
                 const isSelected = activeCitation === citeNum;
 
                 return (

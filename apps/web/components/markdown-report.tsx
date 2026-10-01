@@ -62,8 +62,10 @@ export const MarkdownReport: React.FC<MarkdownReportProps> = ({
         );
       }
 
-      // Check if source exists for this citation (1-indexed)
-      const matchedSource = sources[citationNum - 1];
+      // Check if source exists for this citation (stable citation_index or 1-indexed fallback)
+      const matchedSource = sources.find(
+        (s, idx) => s.citation_index === citationNum || idx + 1 === citationNum
+      );
       const isActive = activeCitation === citationNum;
 
       elements.push(

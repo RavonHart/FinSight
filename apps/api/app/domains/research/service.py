@@ -268,7 +268,7 @@ async def execute_and_persist_research_run(
 
     # 2. Sources
     source_map: Dict[str, uuid.UUID] = {}
-    for src in final_state.get("sources", []):
+    for idx, src in enumerate(final_state.get("sources", []), 1):
         src_temp_id = src.get("id", str(uuid.uuid4()))
         src_uuid = uuid.uuid4()
         source_map[src_temp_id] = src_uuid
@@ -280,7 +280,7 @@ async def execute_and_persist_research_run(
             url=src.get("url"),
             publisher=src.get("publisher"),
             retrieved_at=datetime.now(timezone.utc),
-            metadata_json={"run_id": str(run.id)},
+            metadata_json={"run_id": str(run.id), "citation_index": idx},
         )
         db.add(source_obj)
 
@@ -447,6 +447,7 @@ async def get_run_sources(
         .join(Evidence, Evidence.source_id == Source.id)
         .where(Evidence.research_run_id == run_id)
         .distinct()
+        .order_by(Source.created_at.asc())
     )
     result = await db.execute(stmt)
     return list(result.scalars().all())

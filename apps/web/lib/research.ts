@@ -68,6 +68,7 @@ export interface Source {
   title?: string | null;
   publisher?: string | null;
   published_date?: string | null;
+  citation_index?: number | null;
   trust_tier: number;
   content_snapshot?: string | null;
   created_at: string;

@@ -2,7 +2,7 @@ import uuid
 from decimal import Decimal
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
 class ResearchProjectCreate(BaseModel):
@@ -50,8 +50,44 @@ class SourceResponse(BaseModel):
     publisher: Optional[str] = None
     published_at: Optional[datetime] = None
     retrieved_at: datetime
+    metadata_json: Optional[Dict[str, Any]] = None
+    citation_index: Optional[int] = None
+    trust_tier: int = 3
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_calculated_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            st = data.get("source_type", "")
+            meta = data.get("metadata_json") or {}
+            data["citation_index"] = data.get("citation_index") or meta.get("citation_index")
+            if st == "sec_filing":
+                data["trust_tier"] = 1
+            elif st in ("market_report", "institutional"):
+                data["trust_tier"] = 2
+            else:
+                data["trust_tier"] = 3
+            return data
+
+        # SQLAlchemy model object
+        st = getattr(data, "source_type", "")
+        meta = getattr(data, "metadata_json", {}) or {}
+        tier = 1 if st == "sec_filing" else (2 if st in ("market_report", "institutional") else 3)
+        cite_idx = meta.get("citation_index")
+        return {
+            "id": getattr(data, "id"),
+            "source_type": st,
+            "title": getattr(data, "title"),
+            "url": getattr(data, "url"),
+            "publisher": getattr(data, "publisher"),
+            "published_at": getattr(data, "published_at"),
+            "retrieved_at": getattr(data, "retrieved_at"),
+            "metadata_json": meta,
+            "citation_index": cite_idx,
+            "trust_tier": tier,
+        }
 
 
 class EvidenceResponse(BaseModel):
