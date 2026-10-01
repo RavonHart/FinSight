@@ -16,6 +16,7 @@ import {
   Sparkles,
   ArrowRight,
   Loader2,
+  Sliders,
 } from "lucide-react";
 import { useAuth } from "@/components/auth-context";
 
@@ -175,6 +176,31 @@ export default function DashboardPage() {
             </div>
             <div className="mt-6 pt-4 border-t border-slate-800/60 flex items-center justify-between text-xs font-semibold text-indigo-400">
               <span>Launch Research Workspace</span>
+              <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
+            </div>
+          </Link>
+
+          {/* Simulation & Projections Card */}
+          <Link
+            href="/app/simulation"
+            className="p-6 rounded-2xl border border-cyan-500/30 bg-slate-900/60 hover:border-cyan-500/60 hover:bg-slate-900/90 transition flex flex-col justify-between group shadow-lg shadow-cyan-500/5"
+          >
+            <div>
+              <div className="h-10 w-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 mb-4 group-hover:scale-105 transition">
+                <Sliders className="h-5 w-5" />
+              </div>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-lg font-bold text-white group-hover:text-cyan-300 transition">Simulation &amp; Projections</h3>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+                  Active
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-slate-400 leading-relaxed">
+                Deterministic forward compound growth engine with Bear/Base/Bull multi-scenarios, fee drag, inflation discounting, and optional portfolio seeding.
+              </p>
+            </div>
+            <div className="mt-6 pt-4 border-t border-slate-800/60 flex items-center justify-between text-xs font-semibold text-cyan-400">
+              <span>Run Financial Simulation</span>
               <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
             </div>
           </Link>
