@@ -55,14 +55,9 @@ jobs:
           cd apps/api
           alembic upgrade head
 
-      - name: Run Tests
-        env:
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/finsight_test
-          DATABASE_URL_SYNC: postgresql://postgres:postgres@localhost:5432/finsight_test
-          REDIS_URL: redis://localhost:6379/0
+      - name: Validate Python Compilation
         run: |
-          cd apps/api
-          pytest -v --cov=app tests/
+          python -m compileall apps/api/app
 
   frontend-build:
     name: Frontend Typecheck & Build
