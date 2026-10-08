@@ -206,21 +206,26 @@ export default function DashboardPage() {
           </Link>
 
           {/* Learning Card */}
-          <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition flex flex-col justify-between">
+          <Link
+            href="/app/learning"
+            className="group p-6 rounded-2xl border border-slate-800 bg-slate-900/40 hover:border-amber-500/50 hover:bg-slate-900/70 transition flex flex-col justify-between"
+          >
             <div>
-              <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-4">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-4 group-hover:scale-105 transition">
                 <BookOpen className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-bold text-white">Interactive Learning</h3>
+              <h3 className="text-lg font-bold text-white group-hover:text-amber-300 transition">
+                Interactive Learning &amp; AI Tutor
+              </h3>
               <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-                Concept modules, interactive quizzes, and AI tutor explaining complex financial dynamics.
+                8 curated curriculum modules, interactive sandbox visualizers, comprehension quizzes, and AI tutor guidance.
               </p>
             </div>
-            <div className="mt-6 pt-4 border-t border-slate-800/60 flex items-center justify-between">
-              <span className="text-xs text-amber-400 font-medium">Phase 8</span>
-              <span className="text-xs text-slate-500">Coming next</span>
+            <div className="mt-6 pt-4 border-t border-slate-800/60 flex items-center justify-between text-xs font-semibold text-amber-400">
+              <span>Open Learning Hub</span>
+              <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
             </div>
-          </div>
+          </Link>
 
           {/* Watchlists Card */}
           <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition flex flex-col justify-between">
