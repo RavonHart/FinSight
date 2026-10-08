@@ -14,6 +14,7 @@ class ConfidenceRoutingAction(str, Enum):
     GATHER_MORE_EVIDENCE = "gather_more_evidence"
     REQUEST_CLARIFICATION = "request_clarification"
     MARK_INSUFFICIENT = "mark_insufficient"
+    REFUSE_ADVISORY = "refuse_advisory"
 
 
 class JevQuestionDefinition(BaseModel):

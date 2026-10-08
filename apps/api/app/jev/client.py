@@ -268,6 +268,96 @@ class JevClient:
             choice_value = "MODERATE"
             confidence = 0.83
 
+        elif question.id == "advisory_intent_check":
+            text = str(state.get("text", "")).strip().lower()
+            context_type = str(state.get("context_type", "input")).lower()
+
+            # 1. Direct advisory keywords (fast check)
+            direct_solicitation = any(term in text for term in [
+                "should i buy", "should i sell", "should i short", "should i hold",
+                "is a good buy", "is a good investment", "is a good stock", "is a good trade",
+                "tell me what to invest", "tell me how to invest", "which stock", "which etf",
+                "which fund", "which asset", "guaranteed return", "guaranteed profit",
+                "can you manage for me", "invest for me",
+            ])
+
+            # 2. Rephrased & subtle advisory intent (allocation queries, personal situation splits, comparative profile instructions)
+            subtle_allocation_solicitation = False
+
+            # Pattern A: Capital + horizon personal asset split (e.g. "$50k and 15 years", "in my situation... equity vs bond split")
+            if ("equity" in text and "bond" in text and any(w in text for w in ["split", "allocation", "ratio", "mix"])):
+                if any(k in text for k in ["my situation", "in my case", "for me", "with my", "i have", "my profile"]):
+                    subtle_allocation_solicitation = True
+
+            # Pattern B: Profile mix / actionable profile comparison ("what's a diversified mix for my profile", "what would an investor with my horizon do differently")
+            if any(k in text for k in [
+                "mix for my profile",
+                "portfolio for my profile",
+                "mix for my situation",
+                "allocation for my profile",
+                "with my horizon do differently",
+                "for my horizon do differently",
+                "with my risk do differently",
+                "how should i allocate",
+                "how much should i put",
+            ]):
+                subtle_allocation_solicitation = True
+
+            # Pattern C: Covert multi-turn solicitations
+            if any(p in text for p in ["given what you just said", "given your explanation", "based on that"]) and any(w in text for w in ["my profile", "my portfolio", "mix", "split", "allocation", "for me"]):
+                subtle_allocation_solicitation = True
+
+            # 3. Prescriptive output evaluation (catches LLM giving recommendations without explicit "you should buy" banned phrases)
+            prescriptive_output = False
+            if context_type == "output":
+                prescriptive_signals = [
+                    "sensible next step",
+                    "next step given your horizon",
+                    "increasing your equity",
+                    "increasing your bond",
+                    "decreasing your",
+                    "tilt your",
+                    "tilt toward",
+                    "tilt towards",
+                    "you ought to",
+                    "we recommend",
+                    "i recommend",
+                    "optimal allocation for you",
+                    "suitable portfolio for your profile",
+                    "advised to allocate",
+                    "sensible allocation for you",
+                    "suggest allocating",
+                ]
+                if any(sig in text for sig in prescriptive_signals):
+                    prescriptive_output = True
+
+            is_advisory = direct_solicitation or subtle_allocation_solicitation or prescriptive_output
+
+            if is_advisory:
+                probabilities = {
+                    "SAFE_EDUCATIONAL": 0.04,
+                    "AMBIGUOUS_GUIDANCE": 0.12,
+                    "ADVISORY_ACTIONABLE": 0.84,
+                }
+                choice_value = "ADVISORY_ACTIONABLE"
+                confidence = 0.89
+            elif any(w in text for w in ["differently", "compare", "contrast", "profile"]):
+                probabilities = {
+                    "SAFE_EDUCATIONAL": 0.35,
+                    "AMBIGUOUS_GUIDANCE": 0.55,
+                    "ADVISORY_ACTIONABLE": 0.10,
+                }
+                choice_value = "AMBIGUOUS_GUIDANCE"
+                confidence = 0.72
+            else:
+                probabilities = {
+                    "SAFE_EDUCATIONAL": 0.92,
+                    "AMBIGUOUS_GUIDANCE": 0.06,
+                    "ADVISORY_ACTIONABLE": 0.02,
+                }
+                choice_value = "SAFE_EDUCATIONAL"
+                confidence = 0.94
+
         else:
             # Generic option distribution
             options = question.options or ["LOW", "MODERATE", "HIGH"]

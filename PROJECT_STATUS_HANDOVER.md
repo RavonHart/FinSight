@@ -1,10 +1,10 @@
 # FinSight — Project Status & Handover Documentation
 
 **Last Updated:** October 8, 2026  
-**Current Phase Completed:** Phase 8 (Interactive Learning & AI Tutor)  
+**Current Phase Completed:** Phase 8 (Interactive Learning & AI Tutor — Hardened with Jev Semantic Guardrails)  
 **Next Phase Ready:** Phase 9 (Watchlists & Automated Market Scans)  
-**Test Suite:** 64/64 Tests Passing (100% Green)  
-**Git Head Commit:** `879165a`  
+**Test Suite:** 66/66 Tests Passing (100% Green)  
+**Git Head Commit:** `61742be`  
 
 ---
 
@@ -36,11 +36,14 @@ The project currently has **Phases 1 through 8 fully implemented, unit/integrati
 |   - Mandatory Regulatory Model Disclosure (§20, §32)                                  |
 |   - Dynamic Portfolio Seeding & Pinned engine_version="financial-engine-v1"           |
 +---------------------------------------------------------------------------------------+
-|   Phase 8: Interactive Learning & AI Tutor                                            |
+|   Phase 8: Interactive Learning & AI Tutor (Jev-Hardened)                             |
 |   - 8 Curated Curriculum Categories (Basics, Risk, Portfolio, Stocks, Funds, etc.)   |
 |   - Multi-Lens Explanation Switching (Core Concept / ELI5 Analogy / Quant Rigor)     |
 |   - Interactive In-Lesson Concept Sandbox & Fee Drag Slider Simulator                 |
 |   - Grounded AI Financial Tutor with User Risk Profile Personalization (§18, §32)    |
+|   - Multi-Layer Jev Advisory Semantic Guardrail (advisory_intent_check, §32, §69)    |
+|   - Structural Dependency Injection Isolation (No Portfolio/Holdings Access)         |
+|   - Downstream Semantic Output Interception for Prescriptive Advice Leaks             |
 |   - Deterministic Decimal Quiz Grading with Pedagogical Feedback & RLS Isolation      |
 +---------------------------------------------------------------------------------------+
 ```
@@ -58,6 +61,75 @@ The project currently has **Phases 1 through 8 fully implemented, unit/integrati
 - **Risk Assessment Questionnaire**: 7 dimensions (horizon, goal, experience, liquidity, market reaction, emergency fund, income stability).
 - **Jev Calibration**: Automatic scoring into conservative, moderate, growth, or aggressive tiers with confidence evaluation and ambiguity clarification routing.
 - **Financial Goals**: Versioned target dates, target amounts, priority ranking, and goal progress tracking.
+
+### Phase 3: Deterministic Financial Engine
+- **Pure-Decimal Arithmetic**: Exact currency and ratio calculations using `ROUND_HALF_EVEN`.
+- **Valuation & P&L**: Unweighted cost basis, market valuation, unrealized/realized gains.
+- **CAGR, Drawdown, Inflation Discounting**: Bounded mathematical functions with negative value defense.
+- **XIRR**: Newton-Raphson solver bounded to 100 iterations with fallback to annualized return on non-convergence.
+- **Holdings Sync**: Atomic transaction updates to portfolio positions.
+
+### Phase 4: Autonomous Research Engine
+- **LangGraph Multi-Agent Architecture**: Planner -> Tool Executor -> Evidence Aggregator -> Jev Evaluator -> Synthesis.
+- **Hard Runtime Ceilings**: Max 15 tool calls, 4-minute execution timeout.
+- **Deterministic Deduplication**: Content hashing prevents duplicate evidence gathering.
+- **Vector Storage**: Chunking and embedding persistence in pgvector.
+
+### Phase 5: Jev System One Research Layer
+- **Calibrated Evaluations**: High/Medium/Low thresholds across risk, capacity, financial strength, and evidence sufficiency.
+- **Single Iteration Cap**: Prevents infinite research loops on ambiguous states.
+- **Durable Claim Scans**: Evaluates individual factual claims against extracted evidence.
+
+### Phase 6: Research Workspace UX
+- **Three-Panel UI**: Query formulation -> Live progress stepper -> Dual-mode synthesis & evidence viewer.
+- **Replay-Then-Subscribe SSE**: Zero dropped events on mid-run page reloads.
+- **Stable Citation Indices**: Fixed citation markers link directly to verified sources in drawer.
+
+### Phase 7: Simulation Engine & Interactive Projections UX
+- **Pure-Decimal Closed-Form Compounding**:
+  - Step-by-step monthly compounding: $B_t = B_{t-1}(1 + r_{\text{net}}) + C_t - W_t$.
+  - Models user contributions, fee drag, optional decumulation/withdrawals, and real purchasing power discounting via `calculate_inflation_adjusted_value`.
+  - Zero numerical approximation or solver required.
+- **Honest Multi-Scenario Visualizer (§20, §32)**:
+  - 3 distinct deterministic trajectories: Bear (Base - 3% return, Base + 1.5% inflation), Base, and Bull (Base + 3% return, Base - 0.5% inflation).
+  - Clean SVG line chart with distinct solid strokes (Rose, Emerald, Indigo) and **zero misleading shaded confidence bands or Monte Carlo probability fans**.
+  - Interactive scrub column showing exact point-in-time deterministic dollar values on hover.
+- **Mandatory Regulatory Banner**: Explicit model disclosure informing users that projections are mathematical illustrations, not guarantees or probability distributions.
+- **Reproducibility**: Runs pinned with `engine_version="financial-engine-v1"` and persisted to `simulation_runs`.
+- **Dynamic Portfolio Seeding**: Instant capital seeding from the user's active portfolio holdings.
+
+### Phase 8: Interactive Learning & AI Tutor
+- **8 Core Curriculum Domains (§29)**:
+  - *Basics*: The Compounding Machine & Time Horizon
+  - *Risk*: Risk vs. Return & Geometric Volatility Drag
+  - *Portfolio*: Modern Portfolio Theory & Uncorrelated Assets
+  - *Stocks*: Equity Ownership & Fundamental Drivers of Stock Value
+  - *Funds*: Index Funds vs. Active ETFs & Fee Drag Mechanics
+  - *Financial Statements*: Three-Statement Analysis: Income, Balance Sheet & Cash Flow
+  - *Valuation*: Intrinsic Value: DCF vs. Price Multiples
+  - *Macroeconomics*: Central Banks, Interest Rates & Macroeconomic Cycles
+- **Multi-Lens Pedagogical Explanations**:
+  - Instant lens switcher on every lesson: Core Concept, ELI5 / Analogy, Quantitative Rigor.
+- **Embedded Interactive Concept Sandbox**:
+  - Real-time parameter sliders computing exact terminal balances, gross vs. net capital, and fee drag loss in real-time.
+- **Interactive AI Financial Tutor (§18, §29, §32, §69)**:
+  - Grounded directly in lesson curriculum and registered financial profile.
+  - Multi-layer defense architecture:
+    1. Layer 1: Fast regex / keyword heuristic (0ms rejection of obvious compliance triggers).
+    2. Layer 2: **Jev System One Structured Semantic Judgment** (`advisory_intent_check`):
+       - Detects subtle rephrasings (e.g. personal capital/horizon asset-split solicitations, comparative profile instructions, covert multi-turn solicitations).
+       - Outputs calibrated probabilities and routes via `ConfidenceRoutingAction.REFUSE_ADVISORY`.
+    3. Layer 3: **Structural Dependency Injection Boundary**:
+       - The tutor service only injects `FinancialProfile` (macro horizon, experience, goal, risk posture).
+       - It is structurally barred from reading `holdings` or `portfolios`, guaranteeing it can never give holding-specific advice.
+    4. Layer 4: **Lexical Output Sanitizer**: Neutralizes prescriptive verbs.
+    5. Layer 5: **Downstream Jev Semantic Output Interception**:
+       - If generated LLM text leaks prescriptive advice without banned keywords (e.g. *"a sensible next step given your horizon would be increasing your equity allocation"*), Jev output classification intercepts it downstream before reaching the client, replacing the payload with a regulatory redirection framework and `is_advisory_refusal = True`.
+- **Deterministic Quiz Grading & Progress Tracking**:
+  - Sanitized question views (zero correct answer index leakage).
+  - Pure `Decimal` score computation with `ROUND_HALF_EVEN`.
+  - Passing threshold (≥ 70%) marks module complete and updates dashboard mastery rate.
+  - PostgreSQL Row-Level Security (`learning_progress_isolation_policy`, `quiz_attempts_isolation_policy`) guarantees multi-tenant isolation.
 
 ### Phase 3: Deterministic Financial Engine
 - **Pure `Decimal` Arithmetic**: All portfolio valuation, allocation weights, sector exposures, CAGR, and HHI calculations use strict `Decimal` precision with half-even rounding (`ROUND_HALF_EVEN`). Zero binary float representation leakage.

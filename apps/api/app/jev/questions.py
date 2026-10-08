@@ -111,6 +111,15 @@ QUESTIONS_REGISTRY: Dict[str, JevQuestionDefinition] = {
         high_threshold=0.80,
         medium_threshold=0.50,
     ),
+    "advisory_intent_check": JevQuestionDefinition(
+        id="advisory_intent_check",
+        description="Semantic judgment evaluating whether user inquiry or tutor response solicits or provides individualized investment advice, specific asset allocation, or trade recommendations (§32, §69)",
+        result_type=JevResultType.CHOICE,
+        options=["SAFE_EDUCATIONAL", "AMBIGUOUS_GUIDANCE", "ADVISORY_ACTIONABLE"],
+        version="1.0.0",
+        high_threshold=0.80,
+        medium_threshold=0.50,
+    ),
 }
 
 

@@ -19,6 +19,10 @@ from app.domains.learning.schemas import (
     LearningSummaryResponse,
     AITutorResponse,
 )
+from app.jev.client import JevClient
+from app.jev.evaluators import evaluate_advisory_safety
+from app.jev.schemas import ConfidenceRoutingAction
+
 
 
 def _parse_module_content(raw_content: str) -> Dict[str, Any]:
@@ -517,8 +521,31 @@ async def ask_ai_tutor(
 
     concepts_referenced = [module_category, module.slug.replace("-", " ").title()]
 
-    # 1. INPUT INTENT GUARDRAIL: Intercept investment advice solicitation (§32, §69)
-    if detect_advisory_intent(query):
+    # 1. INPUT INTENT GUARDRAIL: Multi-layer detection (§32, §69)
+    # Layer 1: Fast regex / keyword heuristic (0ms cheap bypass layer)
+    # Layer 2: Jev System One semantic structured judgment (catches subtle rephrasings, horizon splits, comparative advice)
+    jev_client = JevClient()
+    profile_summary = {
+        "investment_horizon": profile.investment_horizon,
+        "risk_tolerance": profile.risk_tolerance,
+        "primary_goal": profile.primary_goal,
+    } if profile else {}
+
+    is_advisory_input = detect_advisory_intent(query)
+    if not is_advisory_input:
+        jev_input_res, jev_input_route = await evaluate_advisory_safety(
+            text=query,
+            context_type="input",
+            client=jev_client,
+            profile_data=profile_summary,
+        )
+        if (
+            jev_input_res.choice_value == "ADVISORY_ACTIONABLE"
+            or jev_input_route.action == ConfidenceRoutingAction.REFUSE_ADVISORY
+        ):
+            is_advisory_input = True
+
+    if is_advisory_input:
         profile_desc = (
             f"your registered profile ({profile.investment_horizon} horizon, {profile.risk_tolerance or 'Moderate'} posture)"
             if profile
@@ -658,8 +685,38 @@ async def ask_ai_tutor(
             "How does this apply to my specific investment profile?"
         ]
 
-    # 3. OUTPUT SAFETY GUARDRAIL: Sanitize any prescriptive advice verbs (§32)
+    # 3. OUTPUT SAFETY GUARDRAIL: Dual-layer output interception (§32, §69)
+    # Layer 1: Lexical pattern sanitizer
     sanitized_explanation = enforce_tutor_output_safety(explanation)
+
+    # Layer 2: Jev System One semantic structured output judgment
+    # Catches subtle prescriptive recommendations where the LLM evaded the banned phrase list
+    jev_output_res, jev_output_route = await evaluate_advisory_safety(
+        text=sanitized_explanation,
+        context_type="output",
+        client=jev_client,
+        profile_data=profile_summary,
+    )
+
+    is_advisory_output_leak = (
+        jev_output_res.choice_value == "ADVISORY_ACTIONABLE"
+        or jev_output_route.action == ConfidenceRoutingAction.REFUSE_ADVISORY
+    )
+
+    if is_advisory_output_leak:
+        # Downstream safety interception catches the false negative before reaching user
+        sanitized_explanation = (
+            f"### Educational Safety Redirection (§32, §69)\n\n"
+            f"The generated tutor response contained prescriptive guidance that exceeded our educational boundary. "
+            f"FinSight AI Tutor does not provide actionable asset allocation directives.\n\n"
+            f"**Theoretical Model Principles for {module_title}:**\n"
+            f"- Academic finance evaluates asset mixes based on expected return variance and covariance (ρ), rather than prescriptive shifts.\n"
+            f"- Consult a licensed fiduciary financial advisor for personalized allocation decisions."
+        )
+        concepts_referenced.append("Advisory Boundary Guardrail")
+        is_refusal = True
+    else:
+        is_refusal = False
 
     disclaimer = (
         "FinSight Educational Disclaimer (§32): This AI Tutor response is provided exclusively for "
@@ -675,6 +732,6 @@ async def ask_ai_tutor(
         concepts_referenced=concepts_referenced,
         suggested_followups=followups,
         profile_context_applied=profile_context_applied,
-        is_advisory_refusal=False,
+        is_advisory_refusal=is_refusal,
         disclaimer=disclaimer,
     )

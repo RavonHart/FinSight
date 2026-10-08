@@ -50,6 +50,15 @@ def route_confidence(
                 reason=f"Confidence {confidence:.2f} is below minimum threshold {med:.2f}; user clarification required",
                 follow_up_prompt=clarification_prompt or "Your responses indicate conflicting financial preferences. Please clarify your primary priority.",
             )
+        elif context == "advisory":
+            return RoutingDecision(
+                action=ConfidenceRoutingAction.REQUEST_CLARIFICATION,
+                confidence=confidence,
+                high_threshold=high,
+                medium_threshold=med,
+                reason=f"Confidence {confidence:.2f} is below minimum threshold {med:.2f}; pedagogical clarification requested",
+                follow_up_prompt=clarification_prompt or "Please rephrase your question around theoretical or educational concepts.",
+            )
         else:
             return RoutingDecision(
                 action=ConfidenceRoutingAction.MARK_INSUFFICIENT,

@@ -1,6 +1,6 @@
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 from app.jev.client import JevClient
-from app.jev.schemas import JevEvaluationRequest, JevEvaluationResult, RoutingDecision
+from app.jev.schemas import ConfidenceRoutingAction, JevEvaluationRequest, JevEvaluationResult, RoutingDecision
 from app.jev.routing import route_confidence
 
 
@@ -158,3 +158,38 @@ async def evaluate_research_state(
         updated_claims.append(cl_copy)
 
     return results_dict, aggregate_confidence, routing_decision, updated_claims
+
+
+async def evaluate_advisory_safety(
+    text: str,
+    context_type: str,
+    client: JevClient,
+    profile_data: Optional[Dict[str, Any]] = None,
+) -> Tuple[JevEvaluationResult, RoutingDecision]:
+    """
+    Evaluates learning inquiry or tutor output using Jev System One question 'advisory_intent_check' (§32, §69).
+    Classifies intent as SAFE_EDUCATIONAL, AMBIGUOUS_GUIDANCE, or ADVISORY_ACTIONABLE.
+    """
+    request = JevEvaluationRequest(
+        question_id="advisory_intent_check",
+        input_state={
+            "text": text,
+            "context_type": context_type,  # "input" or "output"
+            "profile": profile_data or {},
+        },
+    )
+    result = await client.evaluate(request)
+
+    if result.choice_value == "ADVISORY_ACTIONABLE":
+        routing_decision = RoutingDecision(
+            action=ConfidenceRoutingAction.REFUSE_ADVISORY,
+            confidence=result.confidence,
+            high_threshold=0.80,
+            medium_threshold=0.50,
+            reason=f"Semantic advisory intent detected with probability {result.probabilities.get('ADVISORY_ACTIONABLE', 0.0):.2f}; individualized advice refused.",
+        )
+    else:
+        routing_decision = route_confidence(result.confidence, context="advisory")
+
+    return result, routing_decision
+
