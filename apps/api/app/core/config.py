@@ -38,18 +38,35 @@ class Settings(BaseSettings):
     SUPABASE_JWT_SECRET: str = "development-secret-for-jwt-signing-finsight-min-32-chars"
     SUPABASE_JWKS_URL: Optional[str] = None
 
-    # LLM Settings
-    LLM_PROVIDER: str = "gemini"
-    LLM_MODEL: str = "gemini-1.5-flash"
+    # LLM Settings (OpenAI / Gemini / Custom)
+    LLM_PROVIDER: str = "openai"
+    LLM_MODEL: str = "gpt-4o"
     LLM_API_KEY: str = "mock-key"
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
 
     # Jev / TypeSafe AI Settings
     JEV_API_KEY: str = "mock-jev-key"
     JEV_MODEL: str = "jev-v1"
+    JEV_BASE_URL: str = "https://api.typesafe.ai/v1"
     JEV_HIGH_CONFIDENCE_THRESHOLD: float = 0.80
     JEV_MEDIUM_CONFIDENCE_THRESHOLD: float = 0.50
     JEV_CLAIM_SUPPORTED_THRESHOLD: float = 0.80
     JEV_CLAIM_UNVERIFIED_THRESHOLD: float = 0.50
+
+    @property
+    def effective_llm_api_key(self) -> str:
+        return self.OPENAI_API_KEY or self.LLM_API_KEY or ""
+
+    @property
+    def is_live_llm(self) -> bool:
+        key = self.effective_llm_api_key
+        return bool(key and not key.startswith("mock") and len(key) > 8)
+
+    @property
+    def is_live_jev(self) -> bool:
+        key = self.JEV_API_KEY or ""
+        return bool(key and not key.startswith("mock") and len(key) > 8)
 
     # Agent Guardrails & Cost Ceilings (§17, §31)
     MAX_RESEARCH_ITERATIONS: int = 2

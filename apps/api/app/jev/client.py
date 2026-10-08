@@ -23,7 +23,7 @@ class JevClient:
         timeout_seconds: float = 10.0,
     ):
         self.api_key = api_key or settings.JEV_API_KEY
-        self.base_url = (base_url or "https://api.typesafe.ai/v1").rstrip("/")
+        self.base_url = (base_url or getattr(settings, "JEV_BASE_URL", "https://api.typesafe.ai/v1")).rstrip("/")
         self.model_version = model_version or settings.JEV_MODEL
         self.timeout_seconds = timeout_seconds
 

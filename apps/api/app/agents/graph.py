@@ -462,66 +462,104 @@ async def synthesize_report(state: ResearchState) -> ResearchState:
     pe = fin.get("pe_ratio", "N/A")
     fcf = fin.get("free_cash_flow_b", "N/A")
 
-    # Construct clean markdown report
-    sections = []
-    sections.append(f"# Equity Research Report: {fin.get('company_name', ticker)} ({ticker})")
-    sections.append(f"> **Status:** `{status.upper()}` | **Tool Invocations:** {state.get('tool_calls_used', 0)} | **Iterations:** {state.get('research_iterations', 0)}")
+    # Construct report: If live LLM is configured, invoke OpenAI/Gemini; otherwise deterministic template
+    full_markdown = None
+    synthesis_engine = "Deterministic Template"
 
-    if status == "completed_partial":
+    if settings.is_live_llm:
+        from app.core.llm import generate_llm_completion
+        sys_prompt = (
+            "You are an institutional equity research analyst for FinSight. Synthesize an objective, highly rigorous equity research "
+            "report based strictly on the provided financial metrics, moat dynamics, catalysts, verified sources, and Jev System One judgments. "
+            "Provide detailed analytical insight, maintain strict objectivity, and cite the verified sources with bracketed numbers."
+        )
+        user_prompt = (
+            f"Company: {fin.get('company_name', ticker)} ({ticker})\n"
+            f"Report Status: {status.upper()}\n"
+            f"Financials: Revenue ${rev}B, Gross Margin {gm}, P/E {pe}x, Free Cash Flow ${fcf}B, Debt-to-Equity {fin.get('debt_to_equity', 'N/A')}\n"
+            f"Market Moat Analysis: {mkt}\n"
+            f"Recent Catalysts: {news_items}\n"
+            f"Jev System One Assessments: {jev_evals}\n"
+            f"Verified Sources: {sources}\n\n"
+            "Generate a comprehensive report with clear Markdown headings for:\n"
+            "1. Executive Summary\n"
+            "2. Valuation & Financial Fundamentals\n"
+            "3. Competitive Moat & Industry Tailwinds\n"
+            "4. Key Catalysts & Market Developments\n"
+            "5. Structured AI Assessments (Jev System One)\n"
+            "6. Uncertainties & Risks\n"
+            "7. Sources & Provenance"
+        )
+        live_content = await generate_llm_completion(prompt=user_prompt, system_prompt=sys_prompt)
+        if live_content:
+            meta_header = (
+                f"# Equity Research Report: {fin.get('company_name', ticker)} ({ticker})\n\n"
+                f"> **Synthesis Engine:** Live LLM (`{settings.LLM_PROVIDER}/{settings.LLM_MODEL}`) | **Jev Engine:** `{settings.JEV_MODEL}` | **Status:** `{status.upper()}`\n\n"
+            )
+            full_markdown = meta_header + live_content
+            synthesis_engine = f"Live LLM ({settings.LLM_PROVIDER}/{settings.LLM_MODEL})"
+
+    if not full_markdown:
+        # Construct clean deterministic fallback markdown report
+        sections = []
+        sections.append(f"# Equity Research Report: {fin.get('company_name', ticker)} ({ticker})")
+        sections.append(f"> **Status:** `{status.upper()}` | **Tool Invocations:** {state.get('tool_calls_used', 0)} | **Iterations:** {state.get('research_iterations', 0)}")
+
+        if status == "completed_partial":
+            sections.append(
+                "> [!WARNING]\n"
+                "> **Partial Research Coverage**: Some secondary evidence paths were truncated due to execution guardrail boundaries (deadline, tool-call ceiling, or bounded Jev confidence). Findings below represent verified primary evidence only."
+            )
+
+        sections.append("## 1. Executive Summary")
         sections.append(
-            "> [!WARNING]\n"
-            "> **Partial Research Coverage**: Some secondary evidence paths were truncated due to execution guardrail boundaries (deadline, tool-call ceiling, or bounded Jev confidence). Findings below represent verified primary evidence only."
+            f"{fin.get('company_name', ticker)} ({ticker}) represents a core pillar in current computing architecture. "
+            f"With reported annual revenues of ${rev}B and gross margins of {gm}, the company demonstrates strong structural profitability."
         )
 
-    sections.append("## 1. Executive Summary")
-    sections.append(
-        f"{fin.get('company_name', ticker)} ({ticker}) represents a core pillar in current computing architecture. "
-        f"With reported annual revenues of ${rev}B and gross margins of {gm}, the company demonstrates strong structural profitability."
-    )
+        sections.append("## 2. Valuation & Financial Fundamentals")
+        sections.append(
+            f"| Metric | Reported Value | Source Benchmark |\n"
+            f"| :--- | :--- | :--- |\n"
+            f"| **Revenue (FY)** | ${rev}B | {fin.get('source_filing', 'SEC Filing')} |\n"
+            f"| **Gross Margin** | {gm} | SEC 10-K |\n"
+            f"| **Trailing P/E** | {pe}x | Market Multiple |\n"
+            f"| **Free Cash Flow** | ${fcf}B | Operating Statements |\n"
+            f"| **Debt to Equity** | {fin.get('debt_to_equity', '0.24')} | Balance Sheet |"
+        )
 
-    sections.append("## 2. Valuation & Financial Fundamentals")
-    sections.append(
-        f"| Metric | Reported Value | Source Benchmark |\n"
-        f"| :--- | :--- | :--- |\n"
-        f"| **Revenue (FY)** | ${rev}B | {fin.get('source_filing', 'SEC Filing')} |\n"
-        f"| **Gross Margin** | {gm} | SEC 10-K |\n"
-        f"| **Trailing P/E** | {pe}x | Market Multiple |\n"
-        f"| **Free Cash Flow** | ${fcf}B | Operating Statements |\n"
-        f"| **Debt to Equity** | {fin.get('debt_to_equity', '0.24')} | Balance Sheet |"
-    )
+        sections.append("## 3. Competitive Moat & Industry Tailwinds")
+        sections.append(f"**Software & Ecosystem Moat**: {mkt.get('software_moat', 'Proprietary developer ecosystem and switching costs.')}")
+        if mkt.get("key_competitors"):
+            sections.append(f"**Key Competitors**: {', '.join(mkt.get('key_competitors', []))}")
 
-    sections.append("## 3. Competitive Moat & Industry Tailwinds")
-    sections.append(f"**Software & Ecosystem Moat**: {mkt.get('software_moat', 'Proprietary developer ecosystem and switching costs.')}")
-    if mkt.get("key_competitors"):
-        sections.append(f"**Key Competitors**: {', '.join(mkt.get('key_competitors', []))}")
+        sections.append("## 4. Key Catalysts")
+        for item in news_items[:3]:
+            sections.append(f"- **{item.get('headline')}** ({item.get('date', 'Recent')}): {item.get('summary')}")
 
-    sections.append("## 4. Key Catalysts")
-    for item in news_items[:3]:
-        sections.append(f"- **{item.get('headline')}** ({item.get('date', 'Recent')}): {item.get('summary')}")
+        sections.append("## 5. Structured AI Assessments (Jev System One)")
+        if jev_evals:
+            for ev in jev_evals:
+                qid_title = ev.get("question_id", "").replace("_", " ").title()
+                val = ev.get("choice_value", "N/A")
+                conf = ev.get("confidence", 0.0)
+                sections.append(f"- **{qid_title}**: `{val}` (Confidence: {conf:.1%})")
+        else:
+            sections.append("*Jev evaluations omitted or bounded by execution limits.*")
 
-    sections.append("## 5. Structured AI Assessments (Jev System One)")
-    if jev_evals:
-        for ev in jev_evals:
-            qid_title = ev.get("question_id", "").replace("_", " ").title()
-            val = ev.get("choice_value", "N/A")
-            conf = ev.get("confidence", 0.0)
-            sections.append(f"- **{qid_title}**: `{val}` (Confidence: {conf:.1%})")
-    else:
-        sections.append("*Jev evaluations omitted or bounded by execution limits.*")
+        sections.append("## 6. Uncertainties & Risks")
+        if mkt.get("supply_chain_bottlenecks"):
+            sections.append(f"- **Supply Chain Concentration**: {mkt.get('supply_chain_bottlenecks')}")
+        sections.append("- **Regulatory & Export Scrutiny**: Global trade policy and sovereign technology regulations remain an active monitoring point.")
+        if status == "completed_partial":
+            sections.append(f"- **Incomplete Verification**: Secondary findings bounded by {state.get('quality_checks', {}).get('reason', 'guardrails')}.")
 
-    sections.append("## 6. Uncertainties & Risks")
-    if mkt.get("supply_chain_bottlenecks"):
-        sections.append(f"- **Supply Chain Concentration**: {mkt.get('supply_chain_bottlenecks')}")
-    sections.append("- **Regulatory & Export Scrutiny**: Global trade policy and sovereign technology regulations remain an active monitoring point.")
-    if status == "completed_partial":
-        sections.append(f"- **Incomplete Verification**: Secondary findings bounded by {state.get('quality_checks', {}).get('reason', 'guardrails')}.")
+        sections.append("## 7. Sources & Provenance")
+        for idx, src in enumerate(sources, 1):
+            url = src.get("url") or "#"
+            sections.append(f"{idx}. [{src.get('title')}]({url}) — *{src.get('publisher')}*")
 
-    sections.append("## 7. Sources & Provenance")
-    for idx, src in enumerate(sources, 1):
-        url = src.get("url") or "#"
-        sections.append(f"{idx}. [{src.get('title')}]({url}) — *{src.get('publisher')}*")
-
-    full_markdown = "\n\n".join(sections)
+        full_markdown = "\n\n".join(sections)
 
     report_data = {
         "title": f"Investment Research: {ticker}",
@@ -532,6 +570,7 @@ async def synthesize_report(state: ResearchState) -> ResearchState:
         "evidence_count": len(evidence),
         "sources_count": len(sources),
         "jev_evaluations_count": len(jev_evals),
+        "synthesis_engine": synthesis_engine,
         "completed_at": datetime.now(timezone.utc).isoformat(),
     }
     state["report"] = report_data
