@@ -1,4 +1,5 @@
 import asyncio
+from decimal import Decimal
 from typing import Dict, List, Optional, Any
 import httpx
 from fastapi import HTTPException, status
@@ -40,24 +41,75 @@ class JevClient:
         self, requests: List[JevEvaluationRequest]
     ) -> List[JevEvaluationResult]:
         """
-        Evaluates multiple questions in parallel against input state.
-        Uses HTTP client when credentials exist; otherwise uses calibrated local evaluator.
+        Evaluates multiple questions in parallel against input state using official TypeSafe System One API (§13).
+        Endpoint: POST /v1/systemone
+        Payload: { "state": ..., "model": "jev-latest", "questions": { ... } }
+        Falls back to local calibrated evaluator on error or when in mock mode.
         """
         if not requests:
             return []
 
         if not self.is_mock_mode:
             try:
+                # Build questions map matching official TypeSafe System One schema
+                questions_map: Dict[str, Any] = {}
+                for r in requests:
+                    q_def = get_question(r.question_id)
+                    q_type = "choice"
+                    instructions = q_def.description if q_def else f"Evaluate {r.question_id}"
+                    
+                    if q_def and q_def.result_type == JevResultType.NOUL:
+                        questions_map[r.question_id] = {
+                            "type": "noul",
+                            "instructions": instructions,
+                        }
+                    elif q_def and q_def.result_type == JevResultType.SCORE:
+                        questions_map[r.question_id] = {
+                            "type": "score",
+                            "instructions": instructions,
+                            "criteria": q_def.options or ["Level 1", "Level 2", "Level 3"],
+                        }
+                    else:
+                        # Choice question (default)
+                        opts = q_def.options if q_def else ["LOW", "MODERATE", "HIGH"]
+                        criteria = {opt: f"Evaluates to {opt}" for opt in opts}
+                        questions_map[r.question_id] = {
+                            "type": "choice",
+                            "instructions": instructions,
+                            "criteria": criteria,
+                        }
+
+                def _normalize_json_state(val: Any) -> Any:
+                    if isinstance(val, Decimal):
+                        return float(val)
+                    if isinstance(val, dict):
+                        return {str(k): _normalize_json_state(v) for k, v in val.items()}
+                    if isinstance(val, (list, tuple)):
+                        return [_normalize_json_state(x) for x in val]
+                    if hasattr(val, "isoformat"):
+                        return val.isoformat()
+                    return val
+
+                # Combined state from batch requests (typically identical across request batch)
+                raw_state: Any = requests[0].input_state
+                if len(requests) > 1 and any(r.input_state != requests[0].input_state for r in requests):
+                    # In rare cases of mixed states, pass dictionary of states
+                    raw_state = {r.question_id: r.input_state for r in requests}
+                
+                state_data = _normalize_json_state(raw_state)
+
+                url = f"{self.base_url}/systemone"
+                # TypeSafe uses "jev-latest" as flagship model identifier
+                model_name = "jev-latest" if (not self.model_version or self.model_version in ("jev-v1", "v1", "default")) else self.model_version
+                payload = {
+                    "state": state_data,
+                    "model": model_name,
+                    "questions": questions_map,
+                }
+
                 async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                    payload = {
-                        "model": self.model_version,
-                        "evaluations": [
-                            {"question_id": r.question_id, "input_state": r.input_state}
-                            for r in requests
-                        ],
-                    }
                     response = await client.post(
-                        f"{self.base_url}/evaluations",
+                        url,
                         headers={
                             "Authorization": f"Bearer {self.api_key}",
                             "Content-Type": "application/json",
@@ -66,24 +118,50 @@ class JevClient:
                     )
                     if response.status_code == 200:
                         data = response.json()
-                        return [
-                            JevEvaluationResult(
-                                question_id=item["question_id"],
-                                result_type=JevResultType(item["result_type"]),
-                                choice_value=item.get("choice_value"),
-                                score_value=item.get("score_value"),
-                                probabilities=item.get("probabilities"),
-                                confidence=float(item["confidence"]),
-                                model_version=self.model_version,
-                                metadata=item.get("metadata", {}),
-                            )
-                            for item in data.get("results", [])
-                        ]
+                        answers = data.get("answers", {})
+                        model_resp = data.get("model", model_name)
+                        results = []
+
+                        for r in requests:
+                            ans = answers.get(r.question_id)
+                            if ans:
+                                ans_type = ans.get("type", "choice")
+                                q_res_type = JevResultType.SCORE if ans_type == "score" else (JevResultType.NOUL if ans_type == "noul" else JevResultType.CHOICE)
+                                
+                                choice_val = ans.get("choice")
+                                score_val = float(ans["score"]) if "score" in ans else None
+                                probs = ans.get("probabilities")
+                                conf = float(ans.get("confidence", 0.85))
+
+                                if ans_type == "noul":
+                                    noul_prob = float(ans.get("noul", 0.5))
+                                    choice_val = "YES" if noul_prob >= 0.5 else "NO"
+                                    probs = {"YES": noul_prob, "NO": round(1.0 - noul_prob, 4)}
+                                    conf = max(noul_prob, 1.0 - noul_prob)
+
+                                results.append(
+                                    JevEvaluationResult(
+                                        question_id=r.question_id,
+                                        result_type=q_res_type,
+                                        choice_value=choice_val,
+                                        score_value=score_val,
+                                        probabilities=probs,
+                                        confidence=conf,
+                                        model_version=model_resp,
+                                        metadata={"source": "typesafe_systemone_live", "usage": data.get("usage", {})},
+                                    )
+                                )
+                            else:
+                                results.append(self._evaluate_locally(r))
+
+                        logger.info(f"TypeSafe System One evaluated {len(results)} questions live (model={model_resp})")
+                        return results
+
                     logger.warning(
-                        f"Jev API returned HTTP {response.status_code}. Falling back to calibrated evaluator."
+                        f"TypeSafe System One API returned HTTP {response.status_code}: {response.text[:200]}. Falling back to calibrated evaluator."
                     )
             except Exception as e:
-                logger.error(f"Failed to communicate with Jev API: {e}. Falling back to calibrated evaluator.")
+                logger.error(f"Failed to communicate with TypeSafe System One API: {e}. Falling back to calibrated evaluator.")
 
         # Calibrated local evaluator for unit/integration testing and resilient offline operation
         return [self._evaluate_locally(r) for r in requests]

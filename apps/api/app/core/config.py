@@ -47,7 +47,7 @@ class Settings(BaseSettings):
 
     # Jev / TypeSafe AI Settings
     JEV_API_KEY: str = "mock-jev-key"
-    JEV_MODEL: str = "jev-v1"
+    JEV_MODEL: str = "jev-latest"
     JEV_BASE_URL: str = "https://api.typesafe.ai/v1"
     JEV_HIGH_CONFIDENCE_THRESHOLD: float = 0.80
     JEV_MEDIUM_CONFIDENCE_THRESHOLD: float = 0.50
