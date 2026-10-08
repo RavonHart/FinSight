@@ -1,3 +1,4 @@
+import logging
 import uuid
 from typing import AsyncGenerator, Optional
 import redis.asyncio as aioredis
@@ -8,6 +9,8 @@ from app.db.session import get_db, get_user_db
 from app.core.config import settings
 from app.core.security import AuthenticatedUser, verify_supabase_jwt
 from app.db.models.users import User
+
+logger = logging.getLogger(__name__)
 
 
 async def get_redis() -> AsyncGenerator[aioredis.Redis, None]:
@@ -59,8 +62,16 @@ async def check_celery_worker_health() -> dict:
         pings = await loop.run_in_executor(None, _ping_sync)
         worker_count = len(pings) if isinstance(pings, dict) else 0
 
+        status_str = "ok" if worker_count > 0 else "degraded"
+        if status_str == "degraded":
+            logger.warning(
+                "Celery worker probe detected 0 active workers (status=degraded). "
+                "Readiness probe will fail-open (HTTP 200) to prevent orchestration crash loops, "
+                "but operational attention is required: background research and daily scans will queue."
+            )
+
         status_dict = {
-            "status": "ok" if worker_count > 0 else "degraded",
+            "status": status_str,
             "active_workers": worker_count,
             "cached": False,
         }
@@ -71,7 +82,10 @@ async def check_celery_worker_health() -> dict:
         await client.aclose()
         return status_dict
     except Exception as e:
-        # Strict fail-open: return degraded without raising
+        logger.warning(
+            f"Celery worker health check failed with exception: {e}. "
+            "Failing-open as degraded to protect container readiness."
+        )
         return {
             "status": "degraded",
             "active_workers": 0,

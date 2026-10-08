@@ -10,6 +10,7 @@ from app.db.session import async_session_factory
 from app.db.models.users import User
 from app.db.models.portfolios import Asset
 from app.core.security import create_access_token
+from app.domains.compliance.service import verify_audit_bundle_digest
 
 
 @pytest.fixture
@@ -266,7 +267,26 @@ async def test_full_platform_golden_journey_and_multi_tenant_isolation(
     refusal_records = [t for t in audit_json["tutor_safety_logs"] if t["is_advisory_refusal"]]
     assert len(refusal_records) >= 1, "Advisory refusal must be preserved in compliance audit trail"
 
-    # 7b. HTML Audit Export
+    # 7b. Re-export to verify SHA-256 Digest Determinism & Anti-Tampering
+    r_comp_json_2 = await client.get("/api/v1/compliance/export?format=json", headers=headers_a)
+    assert r_comp_json_2.status_code == 200
+    audit_json_2 = r_comp_json_2.json()
+    # Transient envelope IDs/timestamps differ:
+    assert audit_json_2["metadata"]["audit_id"] != audit_json["metadata"]["audit_id"]
+    # But the substantive SHA-256 integrity hash is 100% deterministic and identical!
+    assert audit_json_2["metadata"]["sha256_digest"] == audit_json["metadata"]["sha256_digest"]
+
+    # Cryptographic verification passes on genuine audit bundles
+    assert verify_audit_bundle_digest(audit_json) is True
+    assert verify_audit_bundle_digest(audit_json_2) is True
+
+    # Tampering test: mutating any audited value causes verification to fail immediately
+    tampered = dict(audit_json)
+    tampered["user_profile"] = dict(tampered["user_profile"])
+    tampered["user_profile"]["risk_tier"] = "TAMPERED_TIER"
+    assert verify_audit_bundle_digest(tampered) is False
+
+    # 7c. HTML Audit Export
     r_comp_html = await client.get("/api/v1/compliance/export?format=html", headers=headers_a)
     assert r_comp_html.status_code == 200
     assert "text/html" in r_comp_html.headers["content-type"]
@@ -288,5 +308,15 @@ async def test_full_platform_golden_journey_and_multi_tenant_isolation(
     assert ready_data["database"]["status"] == "ok"
     assert ready_data["database"]["vector_extension"] == "ok"
     assert "pool" in ready_data["database"]
+    
+    pool_info = ready_data["database"]["pool"]
+    assert "size" in pool_info
+    assert "overflow" in pool_info
+    assert pool_info["overflow"] >= 0, "Normalized overflow should be clamped >= 0 for on-call clarity"
+    assert "available_capacity" in pool_info
+    assert pool_info["available_capacity"] > 0
+    assert "convention_note" in pool_info
+    assert "raw_overflow" in pool_info
+
     assert ready_data["redis"] == "ok"
     assert "workers" in ready_data

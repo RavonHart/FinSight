@@ -98,11 +98,28 @@ async def check_database_detailed_health() -> dict:
             vector_ok = (r2.scalar() or 0) > 0
 
         pool = async_engine.pool
+        checked_out = pool.checkedout()
+        pool_size = pool.size()
+        checked_in = pool.checkedin()
+        raw_overflow = pool.overflow()
+
+        # In SQLAlchemy QueuePool, pool.overflow() = checked_out - size.
+        # This formula returns negative integers when checked-out capacity is below base pool size
+        # (e.g. -9 indicates size=10, checked_out=1, leaving 9 base slots available).
+        # We expose overflow_active (clamped >= 0) and available_capacity for intuitive 3am on-call operations,
+        # while preserving raw_overflow and a convention_note for telemetry precision.
+        overflow_active = max(0, raw_overflow)
+        max_overflow = getattr(pool, "max_overflow", lambda: 10)() if hasattr(pool, "max_overflow") else 10
+        available_capacity = max(0, (pool_size + max_overflow) - checked_out)
+
         pool_stats = {
-            "size": pool.size(),
-            "checked_in": pool.checkedin(),
-            "checked_out": pool.checkedout(),
-            "overflow": pool.overflow(),
+            "size": pool_size,
+            "checked_in": checked_in,
+            "checked_out": checked_out,
+            "overflow": overflow_active,
+            "available_capacity": available_capacity,
+            "raw_overflow": raw_overflow,
+            "convention_note": "raw_overflow represents (checked_out - size) per SQLAlchemy QueuePool; negative indicates unused base capacity",
         }
 
         return {

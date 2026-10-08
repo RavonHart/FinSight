@@ -186,14 +186,23 @@ The platform has **all 10 phases fully implemented, unit/integration tested, and
 
 ### Phase 10: Production Hardening, Observability, Compliance Packager & Launch
 - **Deep Readiness Probe (`/health/ready`)**:
-  - Verifies Postgres connectivity, pgvector extension availability, and live connection pool saturation statistics (`pool.size()`, `pool.checkedin()`, `pool.checkedout()`, `pool.overflow()`).
+  - Verifies Postgres connectivity, pgvector extension availability, and live connection pool saturation statistics.
+  - **Connection Pool Telemetry Normalization**: SQLAlchemy's `QueuePool.overflow()` returns a negative integer when checked-out connections are below the pool's base size (`checked_out - size`). To prevent on-call confusion at 3am:
+    - `overflow` is clamped to active overflow connections: `max(0, raw_overflow)`.
+    - Exposes intuitive `available_capacity: (size + max_overflow) - checked_out`.
+    - Preserves `raw_overflow` alongside an explicit `convention_note` explaining the formula for telemetry precision.
   - Verifies Redis connectivity and active rate-limit counter availability.
-  - Inspects Celery worker heartbeat via Redis cache (10s TTL) with **fail-open semantics**: if workers lag or are temporarily busy, the probe marks workers `"degraded"` but maintains `200 OK`, preventing cascading readiness failures.
+  - **Fail-Open Worker Semantics & Operational Alerting**:
+    - Inspects Celery worker heartbeat via Redis cache (10s TTL) with fail-open semantics: if workers lag or are temporarily unreachable, the probe marks workers `"status": "degraded"` but returns HTTP 200 to prevent container orchestration crash-loops.
+    - **Operational Alerting**: To ensure fail-open does not become fail-silent, degraded or unreachable worker states immediately emit structured `logger.warning(...)` messages for log aggregators (Datadog, CloudWatch Logs, Loki) to trigger high-visibility alerts while jobs remain safely queued in Redis.
 - **Institutional Security Headers Middleware**:
   - Enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`, and `Referrer-Policy: strict-origin-when-cross-origin` on every API response.
 - **Statutory Regulatory & Compliance Audit Packager (§20, §32, §69)**:
   - New `/api/v1/compliance/export` endpoint supporting structured machine JSON and print-ready CSS HTML formats.
-  - Computes tamper-evident SHA-256 cryptographic integrity hash across bundle payload.
+  - **Deterministic SHA-256 Cryptographic Integrity Digest**:
+    - The tamper-evident digest is computed over the **canonical substantive financial payload** (`user_profile`, `simulations`, `research_reports`, `tutor_safety_logs`) using sorted keys (`sort_keys=True`), compact separators (`separators=(',', ':')`), and deterministic database secondary sorting (`order_by(..., id)`).
+    - Excludes transient export envelopes (`audit_id`, `export_timestamp`, and `sha256_digest` itself), guaranteeing that repeat exports over identical underlying records produce 100% identical hashes.
+    - Exported packages can be independently re-verified at any time via `verify_audit_bundle_digest(bundle)`, while any unauthorized mutation of audited fields immediately fails verification.
   - Packages complete platform provenance:
     - User registered financial profile and calibrated risk tolerance tier.
     - Closed-form deterministic portfolio simulations with pinned `engine_version="financial-engine-v1"`.
@@ -203,6 +212,7 @@ The platform has **all 10 phases fully implemented, unit/integration tested, and
 - **End-to-End Golden Journey Test (`test_e2e_platform_journey.py`)**:
   - Verifies the unbroken golden thread from Tenant A onboarding, risk assessment, portfolio transactions, closed-form projections, AI Tutor queries, and watchlist scans.
   - **Penetration-style multi-tenant RLS assertions**: A concurrent Tenant B actively attempts cross-tenant reads and mutations against Tenant A's portfolios, simulations, watchlists, scans, and notifications — asserted to fail with 404 / 403 / empty returns.
+  - Verifies repeat export SHA-256 digest determinism, anti-tampering rejection, and connection pool available capacity metrics.
 - **Frontend Compliance UI Integration**:
   - Added "Regulatory Compliance & Audit Packager" card to the user Profile workspace (`/app/profile`) with one-click JSON archive export and printable report launch.
 
@@ -212,7 +222,8 @@ The platform has **all 10 phases fully implemented, unit/integration tested, and
 
 | Commit | Description |
 |:-------|:------------|
-| *(Pending)* | **feat: Phase 10 — Production Hardening, Deep Readiness Probe, Compliance Audit Packager, Security Headers & E2E Golden Journey** |
+| *(Pending)* | **hardening: Phase 10 — Canonical SHA-256 digest determinism, connection pool available capacity telemetry, and fail-open operational alerting** |
+| `7db87b7` | feat: Phase 10 — Production Hardening, Deep Readiness Probe, Compliance Audit Packager, Security Headers & E2E Golden Journey |
 | `95de647` | feat: Phase 9 — Watchlists & Automated Market Scans with Idempotency, Aggregated Notifications, Celery Tasks & RLS |
 | `61742be` | feat: Phase 8 — AI Tutor Jev semantic guardrail with safe default routing, hourly cost ceilings, and residual-risk documentation |
 | `31c26b5` | feat: Phase 8 — Interactive Learning & AI Tutor with Curriculum, Sandbox & Quiz Grading |
@@ -250,7 +261,7 @@ tests/test_research.py (12 passed)
 tests/test_rls.py (1 passed)
 tests/test_simulations.py (6 passed)
 tests/test_watchlists.py (6 passed)
-============================== 73 passed in ~10.2s ==============================
+============================== 73 passed in ~10.1s ==============================
 ```
 
 ---
@@ -266,29 +277,32 @@ d:/FinSight/
 │   │   │   ├── api/router.py      # Master API router mounting all domain routers
 │   │   │   ├── core/              # Config, security, JWT, database session
 │   │   │   ├── db/
-│   │   │   │   ├── migrations/    # Alembic migrations (0001, 0002, 0003_learning_rls_and_seed)
+│   │   │   │   ├── migrations/    # Alembic migrations (0001, 0002, 0003, 0004_watchlists_rls)
 │   │   │   │   └── models/        # SQLAlchemy 2.0 async models (26 tables)
 │   │   │   ├── domains/
 │   │   │   │   ├── auth/          # Auth endpoints & service
+│   │   │   │   ├── compliance/    # Phase 10 regulatory audit packager (JSON/HTML & canonical digest)
 │   │   │   │   ├── jev/           # Jev calibrated confidence evaluator
 │   │   │   │   ├── learning/      # Learning domain router, service, schemas, AI tutor
 │   │   │   │   ├── portfolios/    # Portfolios, holdings, transactions
 │   │   │   │   ├── profiles/      # Financial profiles & risk scoring
 │   │   │   │   ├── research/      # Research projects, runs, evidence, sources
-│   │   │   │   └── simulations/   # Simulation domain router, service, schemas
+│   │   │   │   ├── simulations/   # Simulation domain router, service, schemas
+│   │   │   │   └── watchlists/    # Watchlists CRUD, signals, scan execution & notifications
 │   │   │   └── finance/
 │   │   │       ├── engine.py      # Decimal valuation, XIRR, inflation discounting
 │   │   │       └── simulation.py  # Compound growth & multi-scenario simulation engine
-│   │   └── tests/                 # 62 async pytest test cases
+│   │   └── tests/                 # 73 async pytest test cases across all domains
 │   └── web/
 │       ├── app/
 │       │   ├── app/
 │       │   │   ├── dashboard/     # Workspace hub with active module links
 │       │   │   ├── learning/      # Learning Hub (/app/learning) & Lesson Workspace (/[slug])
 │       │   │   ├── portfolio/     # Portfolio management & analytics UI
-│       │   │   ├── profile/       # Financial questionnaire & goals UI
+│       │   │   ├── profile/       # Financial questionnaire, goals & compliance export UI
 │       │   │   ├── research/      # Three-panel research workspace & SSE stream
-│       │   │   └── simulation/    # Phase 7 simulation workspace & SVG visualizer
+│       │   │   ├── simulation/    # Phase 7 simulation workspace & SVG visualizer
+│       │   │   └── watchlists/    # Phase 9 watchlists & market scans workspace
 │       │   ├── login/             # User sign-in
 │       │   └── signup/            # User registration
 │       ├── components/
@@ -298,11 +312,13 @@ d:/FinSight/
 │       │   └── research-plan-panel.tsx       # Left drawer with execution stepper & Jev
 │       └── lib/
 │           ├── auth.ts            # Auth client & token management
+│           ├── compliance.ts      # Phase 10 Compliance export client
 │           ├── learning.ts        # Phase 8 Learning API & AI Tutor client
 │           ├── portfolio.ts       # Portfolio API client
 │           ├── profile.ts         # Profile & goals API client
 │           ├── research.ts        # Research API & SSE client
-│           └── simulation.ts      # Phase 7 simulation API client
+│           ├── simulation.ts      # Phase 7 simulation API client
+│           └── watchlists.ts      # Phase 9 watchlists API client
 ├── docker-compose.yml             # Orchestration for postgres, redis, api, worker, beat, web
 └── PROJECT_STATUS_HANDOVER.md     # This document
 ```

@@ -41,7 +41,7 @@ async def generate_compliance_audit_bundle(
     stmt_profile = (
         select(FinancialProfile)
         .where(FinancialProfile.user_id == user_id)
-        .order_by(desc(FinancialProfile.profile_version))
+        .order_by(desc(FinancialProfile.profile_version), desc(FinancialProfile.id))
         .limit(1)
     )
     res_profile = await session.execute(stmt_profile)
@@ -69,7 +69,7 @@ async def generate_compliance_audit_bundle(
         stmt_sims = (
             select(SimulationRun)
             .where(SimulationRun.user_id == user_id)
-            .order_by(desc(SimulationRun.created_at))
+            .order_by(desc(SimulationRun.created_at), desc(SimulationRun.id))
             .limit(20)
         )
         res_sims = await session.execute(stmt_sims)
@@ -102,16 +102,17 @@ async def generate_compliance_audit_bundle(
         stmt_research = (
             select(ResearchRun)
             .where(ResearchRun.user_id == user_id)
-            .order_by(desc(ResearchRun.created_at))
+            .order_by(desc(ResearchRun.created_at), desc(ResearchRun.id))
             .limit(10)
         )
         res_research = await session.execute(stmt_research)
         for r in res_research.scalars().all():
-            # fetch evidence joined with source
+            # fetch evidence joined with source (deterministic secondary sort)
             stmt_ev = (
                 select(Evidence, Source)
                 .join(Source, Evidence.source_id == Source.id)
                 .where(Evidence.research_run_id == r.id)
+                .order_by(Evidence.id)
             )
             ev_res = await session.execute(stmt_ev)
             ev_pairs = ev_res.all()
@@ -126,8 +127,12 @@ async def generate_compliance_audit_bundle(
                 for ev, src in ev_pairs
             ]
 
-            # fetch claims/jev claim evaluations for this run
-            stmt_claims = select(Claim).where(Claim.research_run_id == r.id)
+            # fetch claims/jev claim evaluations for this run (deterministic secondary sort)
+            stmt_claims = (
+                select(Claim)
+                .where(Claim.research_run_id == r.id)
+                .order_by(Claim.id)
+            )
             claim_res = await session.execute(stmt_claims)
             claim_items = [
                 {
@@ -163,7 +168,7 @@ async def generate_compliance_audit_bundle(
                 FinancialProfile.user_id == user_id,
                 JevEvaluation.question_id == "advisory_intent_check",
             )
-            .order_by(desc(JevEvaluation.created_at))
+            .order_by(desc(JevEvaluation.created_at), desc(JevEvaluation.id))
             .limit(50)
         )
         res_tutor = await session.execute(stmt_tutor)
@@ -188,12 +193,21 @@ async def generate_compliance_audit_bundle(
                 )
             )
 
+    # Compute deterministic SHA-256 digest over canonical substantive audit content
+    canonical_digest = compute_canonical_audit_digest(
+        user_profile=profile_audit,
+        simulations=simulations_audit,
+        research_reports=research_audit,
+        tutor_safety_logs=tutor_audit,
+    )
+
     metadata = ComplianceAuditMetadata(
         audit_id=audit_id,
         export_timestamp=now,
+        sha256_digest=canonical_digest,
     )
 
-    bundle = FullComplianceAuditBundle(
+    return FullComplianceAuditBundle(
         metadata=metadata,
         user_profile=profile_audit,
         simulations=simulations_audit,
@@ -201,12 +215,70 @@ async def generate_compliance_audit_bundle(
         tutor_safety_logs=tutor_audit,
     )
 
-    # Compute SHA-256 digest of serialized bundle
-    serialized = json.dumps(bundle.model_dump(mode="json"), sort_keys=True)
-    digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-    bundle.metadata.sha256_digest = digest
 
-    return bundle
+def compute_canonical_audit_digest(
+    user_profile: Optional[ComplianceProfileAudit],
+    simulations: list[ComplianceSimulationAudit],
+    research_reports: list[ComplianceResearchAudit],
+    tutor_safety_logs: list[ComplianceTutorAudit],
+) -> str:
+    """
+    Computes a deterministic, tamper-evident SHA-256 digest over the canonical substantive
+    financial and compliance payload.
+    
+    Excludes transient metadata (audit_id, export_timestamp, digest itself) so that repeated
+    exports over identical underlying data produce identical, reproducible cryptographic hashes.
+    Uses canonical JSON formatting with sorted keys and compact separators.
+    """
+    substantive_payload = {
+        "user_profile": user_profile.model_dump(mode="json") if user_profile else None,
+        "simulations": [s.model_dump(mode="json") for s in simulations],
+        "research_reports": [r.model_dump(mode="json") for r in research_reports],
+        "tutor_safety_logs": [t.model_dump(mode="json") for t in tutor_safety_logs],
+    }
+    canonical_json = json.dumps(
+        substantive_payload,
+        sort_keys=True,
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
+def verify_audit_bundle_digest(bundle: FullComplianceAuditBundle | dict) -> bool:
+    """
+    Verifies that a compliance audit bundle's sha256_digest matches the canonical hash
+    of its substantive audit contents. Returns True if authentic and untampered, False otherwise.
+    """
+    if isinstance(bundle, dict):
+        payload = {
+            "user_profile": bundle.get("user_profile"),
+            "simulations": bundle.get("simulations", []),
+            "research_reports": bundle.get("research_reports", []),
+            "tutor_safety_logs": bundle.get("tutor_safety_logs", []),
+        }
+        meta = bundle.get("metadata", {})
+        expected_digest = meta.get("sha256_digest") if isinstance(meta, dict) else getattr(meta, "sha256_digest", None)
+    else:
+        payload = {
+            "user_profile": bundle.user_profile.model_dump(mode="json") if bundle.user_profile else None,
+            "simulations": [s.model_dump(mode="json") for s in bundle.simulations],
+            "research_reports": [r.model_dump(mode="json") for r in bundle.research_reports],
+            "tutor_safety_logs": [t.model_dump(mode="json") for t in bundle.tutor_safety_logs],
+        }
+        expected_digest = bundle.metadata.sha256_digest
+
+    if not expected_digest:
+        return False
+
+    canonical_json = json.dumps(
+        payload,
+        sort_keys=True,
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    actual_digest = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+    return actual_digest == expected_digest
 
 
 def render_compliance_audit_html(bundle: FullComplianceAuditBundle) -> str:
@@ -423,7 +495,10 @@ def render_compliance_audit_html(bundle: FullComplianceAuditBundle) -> str:
 
     <h2>5. Cryptographic Integrity Digest</h2>
     <div class="digest-box">
-        SHA-256 Integrity Hash: {meta.sha256_digest or 'Pending'}
+        <strong>SHA-256 Substantive Content Digest:</strong> <code>{meta.sha256_digest or 'Pending'}</code>
+        <div style="font-size: 11px; color: #64748b; margin-top: 6px;">
+            Canonical digest computed over substantive user profile, closed-form simulations, research provenance, and AI tutor guardrail logs. Excludes transient export envelopes (audit_id and export timestamp) to guarantee deterministic cryptographic re-verification for regulatory reviewers.
+        </div>
     </div>
 </body>
 </html>
