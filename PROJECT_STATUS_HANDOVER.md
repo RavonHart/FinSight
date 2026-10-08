@@ -1,10 +1,10 @@
 # FinSight — Project Status & Handover Documentation
 
 **Last Updated:** October 8, 2026  
-**Current Phase Completed:** Phase 8 (Interactive Learning & AI Tutor — Hardened with Jev Semantic Guardrails)  
-**Next Phase Ready:** Phase 9 (Watchlists & Automated Market Scans)  
-**Test Suite:** 66/66 Tests Passing (100% Green)  
-**Git Head Commit:** `61742be`  
+**Current Phase Completed:** Phase 9 (Watchlists & Automated Market Scans — Idempotency & Aggregated Fan-out Hardened)  
+**Next Phase Ready:** Phase 10 (Production Hardening, Performance Optimization & Launch)  
+**Test Suite:** 72/72 Tests Passing (100% Green)  
+**Git Head Commit:** `9466a78`  
 
 ---
 
@@ -12,7 +12,7 @@
 
 FinSight is an institutional-grade, AI-assisted financial research, portfolio analytics, and investment learning platform. It enforces deterministic arithmetic (pure `Decimal` calculations), hard loop termination guardrails, strict tenant isolation via PostgreSQL Row-Level Security (RLS), and Jev "System One" calibrated confidence routing.
 
-The project currently has **Phases 1 through 8 fully implemented, unit/integration tested, and browser-verified** within Docker containers.
+The project currently has **Phases 1 through 9 fully implemented, unit/integration tested, and browser-verified** within Docker containers.
 
 ```
 +---------------------------------------------------------------------------------------+
@@ -45,6 +45,14 @@ The project currently has **Phases 1 through 8 fully implemented, unit/integrati
 |   - Structural Dependency Injection Isolation (No Portfolio/Holdings Access)         |
 |   - Downstream Semantic Output Interception for Prescriptive Advice Leaks             |
 |   - Deterministic Decimal Quiz Grading with Pedagogical Feedback & RLS Isolation      |
++---------------------------------------------------------------------------------------+
+|   Phase 9: Watchlists & Automated Market Scans (Idempotent & Aggregated Fan-out)      |
+|   - Watchlists & Tracked Items CRUD with PostgreSQL Row-Level Security (RLS)          |
+|   - Deterministic Signal Analysis (Momentum Shifts, Valuation Compression, Drawdowns) |
+|   - Celery Beat Daily Scheduled Scans with Date-Unique Idempotency Keys (§38, §52)    |
+|   - In-Flight Concurrency Locks Preventing Duplicate Concurrent Scan Runs             |
+|   - Single Aggregated Notification Fan-out (No Notification Bell Flooding)            |
+|   - Glassmorphic Next.js Watchlists Workspace with Live Scan Execution & Drawer       |
 +---------------------------------------------------------------------------------------+
 ```
 
@@ -137,76 +145,35 @@ The project currently has **Phases 1 through 8 fully implemented, unit/integrati
 - **Structural DI as Ground Truth**: The primary non-negotiable safeguard is the architectural Dependency Injection boundary: the tutor service is physically isolated from the `Portfolio` and `Holding` tables. The tutor has access only to high-level profile macro dimensions (`FinancialProfile`), meaning it structurally cannot provide holding-specific buy/sell directives regardless of model behavior.
 - **Cost Ceilings & Resource Controls (§31, §46)**: Redis-backed hourly interaction quotas (`TUTOR_HOURLY_RATE_LIMIT = 60`) govern `/tutor` endpoints to prevent unbounded token and Jev evaluation consumption from looped interactions.
 
-
-### Phase 3: Deterministic Financial Engine
-- **Pure `Decimal` Arithmetic**: All portfolio valuation, allocation weights, sector exposures, CAGR, and HHI calculations use strict `Decimal` precision with half-even rounding (`ROUND_HALF_EVEN`). Zero binary float representation leakage.
-- **Bounded-Iteration XIRR with Newton-Raphson Fallback**: Handles non-converging cash flows gracefully without infinite loops or runtime crashes.
-- **Transaction Idempotency**: Unique constraint checks and idempotency keys prevent duplicate transaction insertion under race conditions.
-
-### Phase 4: Autonomous Research Graph (LangGraph)
-- **Multi-Agent Orchestration**: Research supervisor coordinating financial analysis, market analysis, news synthesis, evidence validation, and report synthesis.
-- **Hard Runtime Budgets & Mid-Execution Deadlines**:
-  - `MAX_RESEARCH_ITERATIONS = 3`
-  - `MAX_TOOL_CALLS = 12`
-  - `RUN_TIMEOUT_SECONDS = 300` propagated directly into tool-level `effective_timeout`, preventing slow external providers from hanging worker threads.
-- **Pgvector Evidence Chunks**: Evidence paragraphs stored as pgvector `DocumentChunk` records for semantic retrieval.
-
-### Phase 5: Jev Research Layer
-- **System One Calibrated Screen**: Dual-speed architecture evaluating claim validity, factual consistency, and confidence scores.
-- **Centralized Threshold Configuration**: Unified in `JevThresholdConfig`:
-  - `JEV_HIGH_CONFIDENCE_THRESHOLD = 0.80` (Direct synthesis)
-  - `JEV_MEDIUM_CONFIDENCE_THRESHOLD = 0.50` (Bounded single retry)
-  - `< 0.50` (Flagged as unverified/insufficient)
-- **Bounded Single-Iteration Cap**: Jev low confidence can trigger at most one targeted gap-fill query within the research run's lifetime budget.
-
-### Phase 6: Research Workspace & Three-Panel UX
-- **Three-Panel Layout**:
-  - Left Panel: Run overview, live execution stepper, Jev confidence judgments, and claim status tags with explicit numerical thresholds (`Supported Jev ≥ 0.80`).
-  - Middle Panel: Synthesized Markdown report with interactive superscript citation tags (`[1]`, `[2]`).
-  - Right Panel: Evidence Drawer with Trust Tier Badges (Tier 1 Regulatory, Tier 2 Institutional, Tier 3 Web) and persistent database-backed `citation_index`.
-- **Replay-Then-Subscribe SSE Architecture**: Clients connecting or reconnecting mid-run receive a complete historical snapshot frame before live streaming events attach, eliminating race conditions and missed progress frames.
-
-### Phase 7: Simulation Engine & Interactive Projections UX
-- **Pure-Decimal Closed-Form Compounding**:
-  - Step-by-step monthly compounding: $B_t = B_{t-1}(1 + r_{\text{net}}) + C_t - W_t$.
-  - Models user contributions, fee drag, optional decumulation/withdrawals, and real purchasing power discounting via `calculate_inflation_adjusted_value`.
-  - Zero numerical approximation or solver required.
-- **Honest Multi-Scenario Visualizer (§20, §32)**:
-  - 3 distinct deterministic trajectories: Bear (Base - 3% return, Base + 1.5% inflation), Base, and Bull (Base + 3% return, Base - 0.5% inflation).
-  - Clean SVG line chart with distinct solid strokes (Rose, Emerald, Indigo) and **zero misleading shaded confidence bands or Monte Carlo probability fans**.
-  - Interactive scrub column showing exact point-in-time deterministic dollar values on hover.
-- **Mandatory Regulatory Banner**: Explicit model disclosure informing users that projections are mathematical illustrations, not guarantees or probability distributions.
-- **Reproducibility**: Runs pinned with `engine_version="financial-engine-v1"` and persisted to `simulation_runs`.
-- **Dynamic Portfolio Seeding**: Instant capital seeding from the user's active portfolio holdings.
-
-### Phase 8: Interactive Learning & AI Tutor
-- **8 Core Curriculum Domains (§29)**:
-  - *Basics*: The Compounding Machine & Time Horizon
-  - *Risk*: Risk vs. Return & Geometric Volatility Drag
-  - *Portfolio*: Modern Portfolio Theory & Uncorrelated Assets
-  - *Stocks*: Equity Ownership & Fundamental Drivers of Stock Value
-  - *Funds*: Index Funds vs. Active ETFs & Fee Drag Mechanics
-  - *Financial Statements*: Three-Statement Analysis: Income, Balance Sheet & Cash Flow
-  - *Valuation*: Intrinsic Value: DCF vs. Price Multiples
-  - *Macroeconomics*: Central Banks, Interest Rates & Macroeconomic Cycles
-- **Multi-Lens Pedagogical Explanations**:
-  - Instant lens switcher on every lesson:
-    - **Core Concept**: Rigorous standard theory and real-world institutional examples.
-    - **ELI5 / Analogy**: Intuitive real-life mental models for beginners.
-    - **Quantitative Rigor**: Exact algebraic formulas, differential mechanics, and sensitivity notes.
-- **Embedded Interactive Concept Sandbox**:
-  - Real-time parameter sliders (Monthly Addition, Time Horizon, Gross Return, Expense Fee Drag) computing exact terminal balances, gross vs. net capital, and cumulative fee drag loss in real-time.
-- **Interactive AI Financial Tutor (§18, §29, §32)**:
-  - Grounded directly in lesson curriculum.
-  - Automatically personalizes guidance using the student's risk profile (horizon, experience, goal, risk tolerance).
-  - Modes for Clarification, ELI5 Analogies, Quantitative Rigor, Portfolio Context, and Socratic Quiz Hints.
-  - One-click suggested follow-up chips and statutory educational disclaimers.
-- **Deterministic Quiz Grading & Progress Tracking**:
-  - Sanitized question views (zero correct answer index leakage).
-  - Pure `Decimal` score computation with `ROUND_HALF_EVEN`.
-  - Full feedback on choices with pedagogical explanations.
-  - Passing threshold (≥ 70%) marks module complete and updates dashboard mastery rate.
-  - PostgreSQL Row-Level Security (`learning_progress_isolation_policy`, `quiz_attempts_isolation_policy`) guarantees multi-tenant isolation.
+### Phase 9: Watchlists & Automated Market Scans
+- **Database Schema & RLS Isolation (`0004_watchlists_rls.py`)**:
+  - `watchlists`, `watchlist_items`, `watchlist_scans`, and `notifications` tables.
+  - Added unique index on `watchlist_scans.idempotency_key`.
+  - Enabled and forced PostgreSQL Row-Level Security on `watchlist_items` and `watchlist_scans` with tenant isolation policies checking `watchlists.user_id = current_user_id`.
+- **Scan Idempotency & Concurrency Defenses (§38, §52)**:
+  - Daily Celery beat scheduled runs use date-deterministic idempotency keys: `scheduled_scan:{watchlist_id}:{YYYY-MM-DD}`.
+  - In-flight concurrency lock: If a scan is currently `queued` or `running` for a watchlist, subsequent triggers are skipped with 409 Conflict / existing scan returned.
+  - Unique DB index constraint prevents race conditions from creating duplicate scan records.
+- **Aggregated Notification Fan-out Architecture (§38, §52)**:
+  - Bounded notification creation: A scan produces **exactly ONE aggregated notification** summarizing all detected signals (e.g., *"Watchlist Scan: 3 signals in 'Tech Leaders'"* with bullet points) rather than spamming one notification per finding.
+  - Supports user-driven mark-read operations for individual or bulk notifications.
+- **Signal Detection & Analysis Engine**:
+  - Deterministic evaluation of price changes and volatility against configured thresholds:
+    - `momentum_shift`: 20-day return momentum trend.
+    - `valuation_compression`: Pullbacks and value territory entries.
+    - `drawdown_alert`: Severe price drops exceeding risk thresholds.
+  - Typed findings persisted as JSONB in `watchlist_scans.findings` with severity (`high`, `medium`, `low`).
+- **Celery Beat Background Tasks**:
+  - `scheduled_watchlist_scan`: Iterates all active scan-enabled watchlists on daily schedule with date idempotency.
+  - `refresh_holding_prices`: Periodic batch refresher updating market valuations across active holdings.
+  - `NullPool` database connection architecture ensuring event-loop safety across threaded worker executions.
+- **Watchlists & Notifications Workspace UX**:
+  - Glassmorphic Next.js interface at `/app/watchlists`.
+  - Watchlist selector, creation modal, and item management (instant ticker lookup & removal).
+  - Manual "Run Market Scan" button with live loading state.
+  - Findings cards with color-coded severity badges (Emerald/Amber/Rose) and metric tags.
+  - Notification drawer with unread count badge and bulk "Mark all read" capability.
+  - Connected from the main Dashboard.
 
 ---
 
@@ -214,7 +181,9 @@ The project currently has **Phases 1 through 8 fully implemented, unit/integrati
 
 | Commit | Description |
 |:-------|:------------|
-| `31c26b5` | **feat: Phase 8 — Interactive Learning & AI Tutor with Curriculum, Sandbox & Quiz Grading** |
+| *(Pending)* | **feat: Phase 9 — Watchlists & Automated Market Scans with Idempotency, Aggregated Notifications, Celery Tasks & RLS** |
+| `61742be` | feat: Phase 8 — AI Tutor Jev semantic guardrail with safe default routing, hourly cost ceilings, and residual-risk documentation |
+| `31c26b5` | feat: Phase 8 — Interactive Learning & AI Tutor with Curriculum, Sandbox & Quiz Grading |
 | `ae0bfe6` | feat: Phase 7 — Deterministic Simulation Engine & Interactive Projections UX |
 | `6cb21ed` | fix: resolve research UI stuck step, link pgvector chunk storage to evidence, and bind stable citation indexing |
 | `ead493a` | feat: Phase 6 — Research UX & Three-Panel Workspace with live SSE streaming |
@@ -226,7 +195,7 @@ The project currently has **Phases 1 through 8 fully implemented, unit/integrati
 
 ---
 
-## 4. Test Suite Health (62/62 Passing)
+## 4. Test Suite Health (72/72 Passing)
 
 All unit and integration tests run in the containerized environment against live PostgreSQL and Redis instances:
 
@@ -240,14 +209,15 @@ tests/test_celery.py (2 passed)
 tests/test_financial_engine.py (9 passed)
 tests/test_health.py (3 passed)
 tests/test_jev.py (7 passed)
-tests/test_learning.py (7 passed)
+tests/test_learning.py (11 passed)
 tests/test_models.py (1 passed)
 tests/test_portfolios.py (4 passed)
 tests/test_profiles_and_goals.py (6 passed)
 tests/test_research.py (12 passed)
 tests/test_rls.py (1 passed)
 tests/test_simulations.py (6 passed)
-============================== 62 passed in ~6.2s ==============================
+tests/test_watchlists.py (6 passed)
+============================== 72 passed in ~8.7s ==============================
 ```
 
 ---
@@ -334,10 +304,10 @@ docker compose up -d web
 
 ---
 
-## 7. Roadmap: Next Up — Phase 9 (Watchlists & Automated Market Scans)
+## 7. Roadmap: Next Up — Phase 10 (Production Hardening, Observability & Launch)
 
-According to the product blueprint (§38, §52), Phase 9 introduces:
-1. **Watchlists CRUD**: User watchlists and ticker tracking items.
-2. **Celery Beat Scheduled Scans**: Periodic background tasks executing `scheduled_watchlist_scan` and `refresh_holding_prices`.
-3. **Threshold Alerts & Notifications**: Triggering notifications when market valuations or target prices are crossed.
-4. **Watchlists Workspace UX**: Next.js UI for creating watchlists, viewing scanner results, and managing price triggers.
+According to the product blueprint (§38, §52, §70), Phase 10 introduces:
+1. **Production Observability & Metrics**: Prometheus / OpenTelemetry instrumentation for Celery task throughput, Jev judgment latencies, and financial engine execution times.
+2. **End-to-End Synthetic Verification**: Full scenario suites validating research-to-portfolio workflows under high concurrency.
+3. **Audit Log Export & Regulatory Packager**: PDF / JSON compliance report generation bundling citations, Jev confidence trails, and pure-decimal simulation parameters.
+4. **Final Security & Rate Limit Tuning**: Fine-tuning Redis tiered burst and sustained token-bucket windows for institutional deployment.

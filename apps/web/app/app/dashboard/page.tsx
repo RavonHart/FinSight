@@ -228,21 +228,27 @@ export default function DashboardPage() {
           </Link>
 
           {/* Watchlists Card */}
-          <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition flex flex-col justify-between">
+          <Link
+            href="/app/watchlists"
+            className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 hover:border-purple-500/50 hover:bg-slate-900/80 transition flex flex-col justify-between group cursor-pointer"
+          >
             <div>
-              <div className="h-10 w-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4">
+              <div className="h-10 w-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4 group-hover:scale-105 transition">
                 <Eye className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-bold text-white">Watchlists &amp; Scans</h3>
+              <h3 className="text-lg font-bold text-white group-hover:text-purple-300 transition">Watchlists &amp; Scans</h3>
               <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-                Scheduled Celery beat scans, trigger alerts, and automated news &amp; filing monitoring.
+                Scheduled Celery beat scans, trigger alerts, and automated market monitoring.
               </p>
             </div>
             <div className="mt-6 pt-4 border-t border-slate-800/60 flex items-center justify-between">
-              <span className="text-xs text-purple-400 font-medium">Phase 9</span>
-              <span className="text-xs text-slate-500">Coming next</span>
+              <span className="text-xs text-purple-400 font-medium">Phase 9 Active</span>
+              <span className="text-xs text-indigo-400 flex items-center space-x-1 group-hover:translate-x-1 transition">
+                <span>Open Scanner</span>
+                <span>→</span>
+              </span>
             </div>
-          </div>
+          </Link>
 
           {/* User Tenant Info */}
           <div className="p-6 rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/80 to-blue-950/20 flex flex-col justify-between">

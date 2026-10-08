@@ -38,6 +38,7 @@ class WatchlistScan(Base):
     status: Mapped[str] = mapped_column(String(50), default="queued", nullable=False)  # queued, running, completed, failed
     findings_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(120), unique=True, index=True, nullable=True)
 
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
