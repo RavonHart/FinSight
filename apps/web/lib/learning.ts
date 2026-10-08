@@ -82,6 +82,7 @@ export interface AITutorResponse {
   concepts_referenced: string[];
   suggested_followups: string[];
   profile_context_applied: boolean;
+  is_advisory_refusal: boolean;
   disclaimer: string;
 }
 
@@ -144,7 +145,7 @@ export async function getLearningSummary(): Promise<LearningSummary> {
 export async function askAITutor(
   slugOrId: string,
   query: string,
-  mode: "clarify" | "eli5" | "quant" | "portfolio_context" | "quiz_help" = "clarify"
+  mode: "clarify" | "eli5" | "quant" | "profile_context" | "portfolio_context" | "quiz_help" = "clarify"
 ): Promise<AITutorResponse> {
   const res = await fetchWithAuth(`/api/v1/learning/${slugOrId}/tutor`, {
     method: "POST",

@@ -58,7 +58,7 @@ export default function LearningLessonPage() {
 
   // AI Tutor state
   const [tutorQuery, setTutorQuery] = useState<string>("");
-  const [tutorMode, setTutorMode] = useState<"clarify" | "eli5" | "quant" | "portfolio_context" | "quiz_help">("clarify");
+  const [tutorMode, setTutorMode] = useState<"clarify" | "eli5" | "quant" | "profile_context" | "quiz_help">("clarify");
   const [isTutorLoading, setIsTutorLoading] = useState<boolean>(false);
   const [chatMessages, setChatMessages] = useState<
     Array<{
@@ -68,6 +68,7 @@ export default function LearningLessonPage() {
       concepts?: string[];
       followups?: string[];
       profileApplied?: boolean;
+      isAdvisoryRefusal?: boolean;
     }>
   >([]);
 
@@ -163,6 +164,7 @@ export default function LearningLessonPage() {
           concepts: res.concepts_referenced,
           followups: res.suggested_followups,
           profileApplied: res.profile_context_applied,
+          isAdvisoryRefusal: res.is_advisory_refusal,
         },
       ]);
     } catch (err: any) {
@@ -594,14 +596,14 @@ export default function LearningLessonPage() {
                     Quant
                   </button>
                   <button
-                    onClick={() => setTutorMode("portfolio_context")}
+                    onClick={() => setTutorMode("profile_context")}
                     className={`px-2.5 py-1 text-xs font-medium rounded-lg transition ${
-                      tutorMode === "portfolio_context"
+                      tutorMode === "profile_context"
                         ? "bg-amber-500 text-slate-950 font-bold"
                         : "text-slate-400 hover:text-white"
                     }`}
                   >
-                    My Portfolio
+                    Profile Lens
                   </button>
                 </div>
               </div>
@@ -657,6 +659,12 @@ export default function LearningLessonPage() {
                             : "bg-slate-900 border border-slate-800 text-slate-200"
                         }`}
                       >
+                        {msg.sender === "tutor" && msg.isAdvisoryRefusal && (
+                          <div className="mb-3 inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 text-xs font-bold">
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                            <span>Advisory Boundary Intercepted (§32, §69)</span>
+                          </div>
+                        )}
                         <div className="whitespace-pre-line">{msg.text}</div>
 
                         {/* Concepts & Follow-ups for Tutor messages */}

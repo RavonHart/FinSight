@@ -102,7 +102,7 @@ class AITutorRequest(BaseModel):
     query: str = Field(..., min_length=2, max_length=1000, description="User question about financial concept")
     mode: str = Field(
         "clarify",
-        description="Tutoring style: 'clarify' (standard), 'eli5' (simple analogy), 'quant' (mathematical rigor), 'portfolio_context' (connect to user's assets/profile)"
+        description="Tutoring style: 'clarify' (standard), 'eli5' (simple analogy), 'quant' (mathematical rigor), 'profile_context' (connect to user's registered horizon & risk profile), 'quiz_help' (socratic hints)"
     )
 
 
@@ -114,4 +114,5 @@ class AITutorResponse(BaseModel):
     concepts_referenced: List[str]
     suggested_followups: List[str]
     profile_context_applied: bool
+    is_advisory_refusal: bool = False
     disclaimer: str

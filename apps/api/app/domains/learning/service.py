@@ -438,6 +438,50 @@ async def get_user_learning_summary(
     )
 
 
+# ---------------------------------------------------------------------------
+# AI Tutor Guardrails (§18, §32, §69)
+# ---------------------------------------------------------------------------
+
+import re
+
+ADVISORY_INTENT_PATTERNS = [
+    re.compile(r"\bshould\s+i\s+(buy|sell|short|hold|invest\s+in|put\s+money\s+in|trade|allocate\s+to)\b", re.IGNORECASE),
+    re.compile(r"\bhow\s+much\s+(money|cash|capital)\s+should\s+i\s+(put|invest|allocate)\b", re.IGNORECASE),
+    re.compile(r"\btell\s+me\s+(how\s+to|what\s+to)\s+invest\b", re.IGNORECASE),
+    re.compile(r"\bwhich\s+(stocks?|assets?|crypto|funds?|etfs?)\s+(should\s+i|to)\s+(buy|pick|choose)\b", re.IGNORECASE),
+    re.compile(r"\bis\s+([A-Za-z]{1,5})\s+a\s+good\s+(buy|investment|stock|trade)\b", re.IGNORECASE),
+    re.compile(r"\bguaranteed\s+(returns?|profit|gain)\b", re.IGNORECASE),
+    re.compile(r"\bcan\s+you\s+(manage|trade|invest\s+for)\s+me\b", re.IGNORECASE),
+]
+
+PRESCRIPTIVE_OUTPUT_PATTERNS = [
+    (re.compile(r"\byou\s+should\s+(buy|sell|invest\s+in|allocate\s+to)\b", re.IGNORECASE), "investors typically evaluate"),
+    (re.compile(r"\bi\s+recommend\s+(buying|selling|purchasing|holding)\b", re.IGNORECASE), "academic financial literature analyzes"),
+    (re.compile(r"\bguaranteed\s+(returns?|profits?|gains?)\b", re.IGNORECASE), "expected risk-adjusted returns"),
+    (re.compile(r"\brisk-free\s+(profit|excess\s+returns?)\b", re.IGNORECASE), "theoretical baseline"),
+]
+
+
+def detect_advisory_intent(query: str) -> bool:
+    """
+    Scans user prompt for investment advice solicitation or trade recommendations (§32, §69).
+    """
+    for pattern in ADVISORY_INTENT_PATTERNS:
+        if pattern.search(query):
+            return True
+    return False
+
+
+def enforce_tutor_output_safety(text: str) -> str:
+    """
+    Scans tutor output and sanitizes any prescriptive advice phrasing into educational terms (§32).
+    """
+    sanitized = text
+    for pattern, replacement in PRESCRIPTIVE_OUTPUT_PATTERNS:
+        sanitized = pattern.sub(replacement, sanitized)
+    return sanitized
+
+
 async def ask_ai_tutor(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -446,26 +490,23 @@ async def ask_ai_tutor(
     mode: str = "clarify",
 ) -> AITutorResponse:
     """
-    Interactive AI Financial Tutor grounded in the module content and personalized
-    with the user's risk profile and goals (§18, §29, §32).
+    Interactive AI Financial Tutor grounded in module content and user's risk profile.
+    Actively enforces regulatory boundary: refuses individualized investment advice (§18, §29, §32, §69).
     """
     module = await _resolve_module(db, slug_or_id)
     content = _parse_module_content(module.content)
 
-    # Optional: fetch user's financial profile
+    # Normalize mode alias (portfolio_context -> profile_context)
+    normalized_mode = "profile_context" if mode in ("portfolio_context", "profile_context") else mode
+
+    # Optional: fetch user's financial profile (macro risk posture only; NO holdings)
     prof_stmt = select(FinancialProfile).where(FinancialProfile.user_id == user_id)
     prof_res = await db.execute(prof_stmt)
     profile = prof_res.scalar_one_or_none()
 
     profile_context_applied = False
-    profile_snippet = ""
-    if profile:
+    if profile and normalized_mode == "profile_context":
         profile_context_applied = True
-        profile_snippet = (
-            f" [User Context: Experience={profile.experience_level}, "
-            f"Horizon={profile.investment_horizon}, Goal={profile.primary_goal}, "
-            f"Risk={profile.risk_tolerance or 'Moderate'}]"
-        )
 
     module_title = module.title
     module_category = module.category
@@ -474,11 +515,56 @@ async def ask_ai_tutor(
     eli5_body = content.get("eli5", "")
     quant_body = content.get("quant", "")
 
-    # Tailored tutor response generation based on mode
-    q_lower = query.lower()
     concepts_referenced = [module_category, module.slug.replace("-", " ").title()]
 
-    if mode == "eli5":
+    # 1. INPUT INTENT GUARDRAIL: Intercept investment advice solicitation (§32, §69)
+    if detect_advisory_intent(query):
+        profile_desc = (
+            f"your registered profile ({profile.investment_horizon} horizon, {profile.risk_tolerance or 'Moderate'} posture)"
+            if profile
+            else "your high-level investment horizon"
+        )
+        explanation = (
+            f"### Educational Boundary & Framework Pivot (§32, §69)\n\n"
+            f"**FinSight AI Tutor is an educational system and cannot provide individualized investment advice, "
+            f"trade recommendations, or specific portfolio action plans.** We cannot advise you whether to buy, "
+            f"sell, or allocate capital to specific assets.\n\n"
+            f"**How to Analyze This Conceptually via {module_title}:**\n"
+            f"Rather than seeking an actionable trade recommendation, consider the analytical principles taught in this module:\n\n"
+            f"1. **Core Mechanism:** {concept_body[:220]}...\n"
+            f"2. **Risk & Horizon Considerations:** Under {profile_desc}, institutional investors evaluate whether an asset's expected return adequately compensates for its return dispersion and potential drawdown, rather than attempting market timing.\n"
+            f"3. **Evaluative Questions to Ask:**\n"
+            f"   - Does the asset's historical correlation (ρ) provide diversification, or does it add concentrated uncompensated risk?\n"
+            f"   - How does fee drag and volatility drag affect the terminal compound value of this position over your timeline?\n"
+            f"   - Would an unexpected 30% drawdown jeopardize your liquidity needs?"
+        )
+        concepts_referenced.append("Advisory Boundary Guardrail")
+        followups = [
+            f"How does {module_title} mathematically model risk vs return?",
+            "What is volatility drag and how does it erode compounding?",
+            "Can you explain the conceptual formula without specific ticker advice?"
+        ]
+
+        disclaimer = (
+            "FinSight Educational Guardrail (§32, §69): FinSight V1 is strictly a financial education "
+            "and research platform. FinSight does not execute trades, manage funds, or provide individualized "
+            "investment advice. Responses are generated solely to illustrate theoretical financial principles."
+        )
+
+        return AITutorResponse(
+            module_slug=module.slug,
+            query=query,
+            mode=normalized_mode,
+            explanation=explanation,
+            concepts_referenced=concepts_referenced,
+            suggested_followups=followups,
+            profile_context_applied=profile_context_applied,
+            is_advisory_refusal=True,
+            disclaimer=disclaimer,
+        )
+
+    # 2. STANDARD PEDAGOGICAL MODES (Grounded in Module Curriculum)
+    if normalized_mode == "eli5":
         explanation = (
             f"### Simple Analogy: {module_title}\n\n"
             f"{eli5_body}\n\n"
@@ -493,7 +579,7 @@ async def ask_ai_tutor(
             "What common mistake do beginner investors make with this concept?"
         ]
 
-    elif mode == "quant":
+    elif normalized_mode == "quant":
         explanation = (
             f"### Quantitative & Mathematical Framework: {module_title}\n\n"
             f"**Analytical Model:**\n{quant_body}\n\n"
@@ -510,39 +596,40 @@ async def ask_ai_tutor(
             "Can you give an ELI5 simple explanation instead?"
         ]
 
-    elif mode == "portfolio_context":
+    elif normalized_mode == "profile_context":
         profile_prefix = ""
         if profile:
             profile_prefix = (
-                f"Based on your registered profile with a **{profile.investment_horizon}** horizon, "
-                f"**{profile.primary_goal}** objective, and **{profile.risk_tolerance or 'moderate'}** risk posture:\n\n"
+                f"Applying your registered profile dimensions (**{profile.investment_horizon}** horizon, "
+                f"**{profile.primary_goal}** goal, and **{profile.risk_tolerance or 'moderate'}** risk posture):\n"
+                f"*(Note: FinSight AI Tutor does not inspect individual holdings or recommend trades.)*\n\n"
             )
         else:
             profile_prefix = (
-                "For a typical diversified growth portfolio with a 5-to-10+ year investment horizon:\n\n"
+                "For a theoretical diversified growth portfolio with a 5-to-10+ year investment horizon:\n\n"
             )
 
         explanation = (
-            f"### Portfolio Application: {module_title}\n\n"
+            f"### Financial Profile Lens: {module_title}\n\n"
             f"{profile_prefix}"
-            f"When considering *'{query}'*, {module_title} informs your asset allocation and drawdown management. "
+            f"When evaluating *'{query}'*, {module_title} informs long-term asset allocation and drawdown management. "
             f"{example_body}\n\n"
-            f"**Practical Actionable Takeaway:**\n"
-            f"- Verify that your active holdings match your targeted duration and liquidity needs.\n"
-            f"- Avoid premature reallocation during normal market drawdowns.\n"
+            f"**Pedagogical Evaluation Criteria:**\n"
+            f"- Verify that targeted asset classes match your planned horizon and liquidity needs.\n"
+            f"- Evaluate how volatility drag affects multi-year geometric compound returns.\n"
             f"- Rebalance systematically to capture the mathematical benefits of diversification."
         )
-        concepts_referenced.extend(["Portfolio Allocation", "Risk Alignment"])
+        concepts_referenced.extend(["Profile Alignment", "Risk Horizon"])
         followups = [
             "How can I test this in FinSight's Portfolio Simulation workspace?",
             "How does fee drag impact my long-term compounding?",
-            "What quiz questions test this specific portfolio principle?"
+            "What quiz questions test this specific financial principle?"
         ]
 
-    elif mode == "quiz_help":
+    elif normalized_mode == "quiz_help":
         explanation = (
-            f"### Tutor Hint for {module_title}\n\n"
-            f"To answer your question regarding *'{query}'* without giving away the direct answer:\n\n"
+            f"### Socratic Tutor Hint: {module_title}\n\n"
+            f"To answer your question regarding *'{query}'* without giving away direct quiz choices:\n\n"
             f"1. **Core Mechanism to recall:** {concept_body[:200]}...\n"
             f"2. **Think about the direction of cause and effect:** Remember how the formulas behave when time increases or when risk is magnified.\n"
             f"3. **Eliminate obvious distractors:** Any option claiming 'guaranteed 100% risk-free returns' or 'eliminating all market risk' violates the fundamental laws of finance!"
@@ -559,7 +646,7 @@ async def ask_ai_tutor(
             f"### FinSight AI Tutor: {module_title}\n\n"
             f"**Core Principle:**\n{concept_body}\n\n"
             f"**Direct Answer to your question ('{query}'):**\n"
-            f"In financial markets, this dynamics directly impacts long-term capital compounding. "
+            f"In financial markets, this dynamic directly impacts long-term capital compounding. "
             f"{example_body}\n\n"
             f"**Key Rule of Thumb:**\n"
             f"{content.get('key_takeaways', ['Focus on long-term horizon and structural advantages.'])[0]}"
@@ -571,6 +658,9 @@ async def ask_ai_tutor(
             "How does this apply to my specific investment profile?"
         ]
 
+    # 3. OUTPUT SAFETY GUARDRAIL: Sanitize any prescriptive advice verbs (§32)
+    sanitized_explanation = enforce_tutor_output_safety(explanation)
+
     disclaimer = (
         "FinSight Educational Disclaimer (§32): This AI Tutor response is provided exclusively for "
         "educational and informational purposes. It does not constitute individualized investment advice, "
@@ -580,10 +670,11 @@ async def ask_ai_tutor(
     return AITutorResponse(
         module_slug=module.slug,
         query=query,
-        mode=mode,
-        explanation=explanation,
+        mode=normalized_mode,
+        explanation=sanitized_explanation,
         concepts_referenced=concepts_referenced,
         suggested_followups=followups,
         profile_context_applied=profile_context_applied,
+        is_advisory_refusal=False,
         disclaimer=disclaimer,
     )
