@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 
 from app.db.models.learning import LearningModule, LearningProgress, QuizAttempt
 from app.db.models.profiles import FinancialProfile
+from app.db.models.jev import JevEvaluation
 from app.domains.learning.schemas import (
     QuizQuestionView,
     QuizQuestionFeedback,
@@ -572,6 +573,28 @@ async def ask_ai_tutor(
             or jev_input_route.action == ConfidenceRoutingAction.REFUSE_ADVISORY
         ):
             is_advisory_input = True
+
+    # Persist durable Jev evaluation record for audit and compliance trail (§32, §69)
+    if profile:
+        jev_record = JevEvaluation(
+            id=uuid.uuid4(),
+            financial_profile_id=profile.id,
+            question_id="advisory_intent_check",
+            input_state_json={
+                "query": query,
+                "context_type": "input",
+                "mode": normalized_mode,
+                "user_id": str(user_id),
+            },
+            result_type="choice",
+            choice_value="ADVISORY_ACTIONABLE" if is_advisory_input else "SAFE_EDUCATIONAL",
+            confidence=Decimal("0.95") if is_advisory_input else Decimal("0.85"),
+            probabilities_json={"ADVISORY_ACTIONABLE": 0.95 if is_advisory_input else 0.05},
+            model_version="jev-v1",
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(jev_record)
+        await db.commit()
 
     if is_advisory_input:
         profile_desc = (

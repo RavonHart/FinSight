@@ -7,6 +7,7 @@ from app.domains.research.router import research_router
 from app.domains.simulations.router import simulation_router
 from app.domains.learning.router import learning_router
 from app.domains.watchlists.router import watchlists_router, notifications_router
+from app.domains.compliance.router import compliance_router
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -21,6 +22,7 @@ api_router.include_router(simulation_router)
 api_router.include_router(learning_router)
 api_router.include_router(watchlists_router)
 api_router.include_router(notifications_router)
+api_router.include_router(compliance_router)
 
 
 

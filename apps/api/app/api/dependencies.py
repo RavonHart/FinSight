@@ -28,6 +28,59 @@ async def check_redis_health() -> bool:
         return False
 
 
+async def check_celery_worker_health() -> dict:
+    """
+    Checks Celery worker availability with Redis caching (10s TTL) and fail-open semantics (§36).
+    A cache-miss or slow ping defaults to 'degraded' rather than blocking or failing readiness.
+    """
+    cache_key = "health:celery_workers_status"
+    try:
+        client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        cached_val = await client.get(cache_key)
+        if cached_val:
+            await client.aclose()
+            import json
+            return json.loads(cached_val)
+
+        # Cache miss: run brief ping in thread pool to avoid blocking asyncio loop
+        import asyncio
+        from app.workers.celery_app import celery_app
+
+        def _ping_sync():
+            try:
+                # 0.5s timeout prevents long broadcast delays
+                inspector = celery_app.control.inspect(timeout=0.5)
+                ping_res = inspector.ping()
+                return ping_res or {}
+            except Exception:
+                return {}
+
+        loop = asyncio.get_running_loop()
+        pings = await loop.run_in_executor(None, _ping_sync)
+        worker_count = len(pings) if isinstance(pings, dict) else 0
+
+        status_dict = {
+            "status": "ok" if worker_count > 0 else "degraded",
+            "active_workers": worker_count,
+            "cached": False,
+        }
+
+        # Cache in Redis with 10s TTL
+        import json
+        await client.set(cache_key, json.dumps(status_dict), ex=10)
+        await client.aclose()
+        return status_dict
+    except Exception as e:
+        # Strict fail-open: return degraded without raising
+        return {
+            "status": "degraded",
+            "active_workers": 0,
+            "error": str(e),
+            "cached": False,
+        }
+
+
+
 async def get_current_user(
     authorization: Optional[str] = Header(None)
 ) -> AuthenticatedUser:

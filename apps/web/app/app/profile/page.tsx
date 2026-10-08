@@ -23,6 +23,9 @@ import {
   DollarSign,
   AlertCircle,
   RefreshCw,
+  FileText,
+  Printer,
+  Download,
 } from "lucide-react";
 import { useAuth } from "@/components/auth-context";
 import {
@@ -36,6 +39,10 @@ import {
   ProfileAssessment,
   FinancialGoal,
 } from "@/lib/profile";
+import {
+  downloadComplianceAuditJson,
+  openComplianceAuditHtmlWindow,
+} from "@/lib/compliance";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -526,6 +533,43 @@ export default function ProfilePage() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Regulatory Compliance & Audit Export Section (§20, §32, §69) */}
+        <div className="p-6 rounded-3xl border border-slate-800 bg-slate-900/40 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center space-x-2">
+                <FileText className="h-5 w-5 text-indigo-400" />
+                <h2 className="text-lg font-bold text-white">Regulatory Compliance & Audit Packager</h2>
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                  §20 / §32 / §69
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 max-w-2xl">
+                Generate tamper-evident institutional compliance bundles containing your calibrated risk profile,
+                closed-form deterministic portfolio simulations (pinned <code>financial-engine-v1</code>), autonomous research
+                citation trails, and AI Tutor advisory refusal logs.
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => downloadComplianceAuditJson()}
+                className="px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-white text-xs font-semibold flex items-center space-x-2 transition"
+              >
+                <Download className="h-3.5 w-3.5 text-slate-300" />
+                <span>Export JSON Archive</span>
+              </button>
+              <button
+                onClick={() => openComplianceAuditHtmlWindow()}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-xs font-semibold flex items-center space-x-2 shadow-lg shadow-indigo-500/20 transition"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                <span>Printable Report / PDF</span>
+              </button>
+            </div>
+          </div>
         </div>
       </main>
     </div>

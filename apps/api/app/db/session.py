@@ -83,3 +83,38 @@ async def check_database_health() -> bool:
     except Exception as e:
         logger.warning(f"Database health check failed: {e}")
         return False
+
+
+async def check_database_detailed_health() -> dict:
+    """Detailed health probe checking connectivity, vector extension, and pool stats (§36)."""
+    try:
+        async with AsyncSessionLocal() as session:
+            r1 = await session.execute(text("SELECT 1"))
+            db_ok = r1.scalar() == 1
+
+            r2 = await session.execute(
+                text("SELECT count(*) FROM pg_extension WHERE extname = 'vector'")
+            )
+            vector_ok = (r2.scalar() or 0) > 0
+
+        pool = async_engine.pool
+        pool_stats = {
+            "size": pool.size(),
+            "checked_in": pool.checkedin(),
+            "checked_out": pool.checkedout(),
+            "overflow": pool.overflow(),
+        }
+
+        return {
+            "healthy": db_ok,
+            "vector_extension": "ok" if vector_ok else "missing",
+            "connection_pool": pool_stats,
+        }
+    except Exception as e:
+        logger.warning(f"Detailed database check failed: {e}")
+        return {
+            "healthy": False,
+            "vector_extension": "error",
+            "connection_pool": {"error": str(e)},
+        }
+
