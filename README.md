@@ -37,8 +37,7 @@
 ## 🏛 Core System Philosophy
 
 Modern generative AI is prone to hallucination when computing numbers or enforcing strict regulatory boundaries. FinSight solves this through strict separation of concerns:
-
-$$\text{LLMs Reason \& Synthesize} \quad\longleftrightarrow\quad \text{Jev Evaluates \& Validates} \quad\longleftrightarrow\quad \text{Deterministic Code Computes}$$
+> 🧠 **LLMs Reason and Synthesize** &nbsp;⟷&nbsp; ⚖️ **Jev Evaluates and Validates** &nbsp;⟷&nbsp; 🔢 **Deterministic Code Computes**
 
 1. **LLMs Reason and Synthesize**: Large Language Models (OpenAI GPT-4o) formulate hypotheses, plan multi-step research investigations, and synthesize narrative reports.
 2. **TypeSafe System One (Jev) Judges**: Calibrated structured evaluation endpoints validate claims, assess cognitive biases, calculate confidence scores, and enforce regulatory boundaries.
