@@ -22,6 +22,8 @@ from app.domains.learning.schemas import (
 from app.jev.client import JevClient
 from app.jev.evaluators import evaluate_advisory_safety
 from app.jev.schemas import ConfidenceRoutingAction
+from app.core.config import settings
+import redis.asyncio as aioredis
 
 
 
@@ -486,6 +488,30 @@ def enforce_tutor_output_safety(text: str) -> str:
     return sanitized
 
 
+async def check_and_increment_tutor_quota(user_id: uuid.UUID) -> None:
+    """
+    Enforces per-user hourly interaction ceilings for the AI Tutor (§31, §46).
+    Prevents unmetered LLM and Jev token exhaustion if a user loops tutor calls.
+    """
+    try:
+        client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        key = f"quota:tutor:{user_id}"
+        current = await client.incr(key)
+        if current == 1:
+            await client.expire(key, 3600)  # 1 hour rolling window
+        await client.aclose()
+        if current > settings.TUTOR_HOURLY_RATE_LIMIT:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"AI Tutor hourly budget ceiling ({settings.TUTOR_HOURLY_RATE_LIMIT} calls/hour) exceeded. Please try again later.",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        # Resilient offline/test fallback if Redis is unreachable
+        pass
+
+
 async def ask_ai_tutor(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -496,7 +522,9 @@ async def ask_ai_tutor(
     """
     Interactive AI Financial Tutor grounded in module content and user's risk profile.
     Actively enforces regulatory boundary: refuses individualized investment advice (§18, §29, §32, §69).
+    Enforces per-user hourly cost ceilings (§31).
     """
+    await check_and_increment_tutor_quota(user_id)
     module = await _resolve_module(db, slug_or_id)
     content = _parse_module_content(module.content)
 

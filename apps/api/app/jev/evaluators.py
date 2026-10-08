@@ -186,7 +186,17 @@ async def evaluate_advisory_safety(
             confidence=result.confidence,
             high_threshold=0.80,
             medium_threshold=0.50,
-            reason=f"Semantic advisory intent detected with probability {result.probabilities.get('ADVISORY_ACTIONABLE', 0.0):.2f}; individualized advice refused.",
+            reason=f"Semantic advisory intent detected with probability {result.probabilities.get('ADVISORY_ACTIONABLE', 0.0):.2f}; individualized advice refused (§32, §69).",
+        )
+    elif result.choice_value == "AMBIGUOUS_GUIDANCE":
+        # §14 / §32 Safety Boundary Rule: Ambiguity defaults to the SAFE side.
+        # Borderline queries are routed to refusal/framework pivot, NOT silently allowed to proceed.
+        routing_decision = RoutingDecision(
+            action=ConfidenceRoutingAction.REFUSE_ADVISORY,
+            confidence=result.confidence,
+            high_threshold=0.80,
+            medium_threshold=0.50,
+            reason=f"Ambiguous advisory intent detected (confidence {result.confidence:.2f}); safely refusing individualized guidance and pivoting to educational framework (§14, §32).",
         )
     else:
         routing_decision = route_confidence(result.confidence, context="advisory")

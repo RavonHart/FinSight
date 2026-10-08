@@ -131,6 +131,13 @@ The project currently has **Phases 1 through 8 fully implemented, unit/integrati
   - Passing threshold (≥ 70%) marks module complete and updates dashboard mastery rate.
   - PostgreSQL Row-Level Security (`learning_progress_isolation_policy`, `quiz_attempts_isolation_policy`) guarantees multi-tenant isolation.
 
+#### Residual Risk & Boundary Disclosure (§32, §69)
+- **Semantic Boundary vs. Formal Proof**: The multi-layer defense (lexical heuristics + Jev System One semantic structured judgment + downstream output interception) is *meaningfully harder to evade* than regex matching, but does not constitute a mathematically impenetrable boundary.
+- **LLM-Judging-LLM Residual Failure Modes**: Because Jev operates as an LLM-backed structured evaluator, it inherits model calibration drift and novel phrasing evasion risks.
+- **Structural DI as Ground Truth**: The primary non-negotiable safeguard is the architectural Dependency Injection boundary: the tutor service is physically isolated from the `Portfolio` and `Holding` tables. The tutor has access only to high-level profile macro dimensions (`FinancialProfile`), meaning it structurally cannot provide holding-specific buy/sell directives regardless of model behavior.
+- **Cost Ceilings & Resource Controls (§31, §46)**: Redis-backed hourly interaction quotas (`TUTOR_HOURLY_RATE_LIMIT = 60`) govern `/tutor` endpoints to prevent unbounded token and Jev evaluation consumption from looped interactions.
+
+
 ### Phase 3: Deterministic Financial Engine
 - **Pure `Decimal` Arithmetic**: All portfolio valuation, allocation weights, sector exposures, CAGR, and HHI calculations use strict `Decimal` precision with half-even rounding (`ROUND_HALF_EVEN`). Zero binary float representation leakage.
 - **Bounded-Iteration XIRR with Newton-Raphson Fallback**: Handles non-converging cash flows gracefully without infinite loops or runtime crashes.

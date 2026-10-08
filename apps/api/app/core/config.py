@@ -51,10 +51,11 @@ class Settings(BaseSettings):
     JEV_CLAIM_SUPPORTED_THRESHOLD: float = 0.80
     JEV_CLAIM_UNVERIFIED_THRESHOLD: float = 0.50
 
-    # Agent Guardrails (§17)
+    # Agent Guardrails & Cost Ceilings (§17, §31)
     MAX_RESEARCH_ITERATIONS: int = 2
     MAX_TOOL_CALLS: int = 25
     RUN_TIMEOUT_SECONDS: int = 300
+    TUTOR_HOURLY_RATE_LIMIT: int = 60
 
     # LangSmith / Observability
     LANGSMITH_API_KEY: Optional[str] = None

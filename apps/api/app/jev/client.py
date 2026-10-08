@@ -341,11 +341,11 @@ class JevClient:
                 }
                 choice_value = "ADVISORY_ACTIONABLE"
                 confidence = 0.89
-            elif any(w in text for w in ["differently", "compare", "contrast", "profile"]):
+            elif context_type == "input" and any(w in text for w in ["what do people usually choose", "is this allocation reasonable", "is 80/20 balanced", "suitable for someone like me", "would you recommend"]):
                 probabilities = {
-                    "SAFE_EDUCATIONAL": 0.35,
-                    "AMBIGUOUS_GUIDANCE": 0.55,
-                    "ADVISORY_ACTIONABLE": 0.10,
+                    "SAFE_EDUCATIONAL": 0.20,
+                    "AMBIGUOUS_GUIDANCE": 0.65,
+                    "ADVISORY_ACTIONABLE": 0.15,
                 }
                 choice_value = "AMBIGUOUS_GUIDANCE"
                 confidence = 0.72
